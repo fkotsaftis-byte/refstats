@@ -1,4 +1,4 @@
-Name: Ενημέρωση site
+name: Ενημέρωση site
 
 on:
   push:
