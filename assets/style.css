@@ -116,3 +116,23 @@ i.cy{background:var(--card)}i.cr{background:var(--neg);margin-left:4px}
 footer p{margin:4px 0}
 @media (max-width:560px){nav.top{font-size:16px;gap:2px 14px}}
 .m{align-content:start}.m .ev{align-items:flex-start}
+
+/* ---- τηλεκριτική ---- */
+table.ph td,table.ph th{padding:8px 10px}
+table.ph tr.grp th{font-size:10.5px;text-align:center;border-bottom:2px solid var(--line);color:var(--muted)}
+table.ph th.cn{text-align:center;white-space:normal;min-width:72px;line-height:1.2}
+table.ph th.cn a{text-decoration:none}
+table.ph td.v{text-align:center;font-family:var(--display);font-weight:800;font-size:19px;cursor:help}
+table.ph td.l{white-space:normal;min-width:150px}
+table.ph .j{background:color-mix(in srgb,var(--muted) 7%,transparent)}
+table.ph .sub{display:block;font-size:12px;color:var(--muted)}
+.v.ok,.vs.ok,.cons.ok{color:var(--pos)}.v.bad,.vs.bad,.cons.bad{color:var(--neg)}.v.mid,.vs.mid,.cons.mid{color:#B8860B}.v.nil{color:var(--line)}
+td.cons{white-space:nowrap}td.cons span{font-weight:400;color:var(--muted);font-size:12px}
+.phx{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:12px 16px;margin-top:10px;scroll-margin-top:16px}
+.phx:target{outline:2px solid var(--card)}
+.phx h3{font-family:var(--display);font-size:20px;margin:0}
+.phx p{margin:6px 0}
+ul.ops{list-style:none;padding:0;margin:8px 0 0;display:grid;gap:6px}
+.vs{font-weight:700;font-size:13px;white-space:nowrap}
+table.ph th:first-child,table.ph td:first-child{position:sticky;left:0;background:var(--surface);z-index:1;box-shadow:1px 0 0 var(--line)}
+table.ph th.cn{min-width:60px;font-size:10.5px}
