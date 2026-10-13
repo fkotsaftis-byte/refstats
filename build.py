@@ -168,12 +168,12 @@ def consensus(p):
     return ("Λάθος" if bad > ok else "Σωστή" if ok > bad else "Ισοψηφία"), ok, bad
 
 # ---------------------------------------------------------------- stats
-KEYS = ["n", "pen_for", "pen_against", "var_for", "var_against", "red_opp", "red_own", "yel", "foul", "ann", "w", "d", "l"]
+KEYS = ["n", "pen_for", "pen_against", "var_for", "var_against", "red_opp", "red_own", "yel", "yel_opp", "foul", "ann", "w", "d", "l"]
 def side(m, team):
     h = team == m["home"]; o, p = ("h", "a") if h else ("a", "h")
     gf, ga = (m["gh"], m["ga"]) if h else (m["ga"], m["gh"])
     return {"n": 1, "pen_for": m["pen_" + o], "pen_against": m["pen_" + p], "var_for": m["var_" + o], "var_against": m["var_" + p],
-            "red_opp": m["red_" + p], "red_own": m["red_" + o], "yel": m["yel_" + o], "foul": m["foul_" + o], "ann": m["ann_" + o],
+            "red_opp": m["red_" + p], "red_own": m["red_" + o], "yel": m["yel_" + o], "yel_opp": m["yel_" + p], "foul": m["foul_" + o], "ann": m["ann_" + o],
             "w": int(gf > ga), "d": int(gf == ga), "l": int(gf < ga)}
 def saldo(t): return (t["pen_for"] + t["var_for"] + t["red_opp"]) - (t["pen_against"] + t["var_against"] + t["red_own"])
 def totals(ms, team):
@@ -355,7 +355,7 @@ def team_page(team):
     allt = totals(ms, team)
     k = kpis([("Ισοζύγιο", sg(t["saldo"]), cls(t["saldo"])), ("Πέναλτι υπέρ / κατά", f'{t["pen_for"]} / {t["pen_against"]}', ""),
               ("VAR υπέρ / κατά", f'{t["var_for"]} / {t["var_against"]}', ""), ("Κόκκινες υπέρ / κατά", f'{t["red_opp"]} / {t["red_own"]}', ""),
-              ("Κίτρινες", t["yel"], ""), ("Αγώνες", t["n"], "")])
+              ("Κίτρινες υπέρ / κατά", f'{t["yel_opp"]} / {t["yel"]}', ""), ("Αγώνες", t["n"], "")])
     # by referee, all seasons, vs team average
     avg = allt["saldo"] / allt["n"] if allt["n"] else 0
     byref = defaultdict(list)
