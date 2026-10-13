@@ -71,6 +71,10 @@ MATCHES = []
 for r in rows("agones"):
     if not (r.get("ID") and r.get("Γηπεδούχος") and r.get("Φιλοξενούμενος")):
         continue
+    # A match appears on the site only once its card/penalty numbers are filled in.
+    # Rows with these cells still empty (e.g. pasted fixtures) are skipped until completed.
+    if not all((r.get(c) or "").strip() for c in ("Πέναλτι Γηπ", "Πέναλτι Φιλ", "Κίτρινες Γηπ", "Κίτρινες Φιλ")):
+        continue
     m = {"id": r["ID"], "season": r["Σεζόν"], "phase": r.get("Φάση") or "Κανονική", "round": num(r["Αγωνιστική"]),
          "date": pdate(r.get("Ημερομηνία", "")), "home": r["Γηπεδούχος"], "away": r["Φιλοξενούμενος"],
          "gh": num(r["Γκολ Γηπ"]), "ga": num(r["Γκολ Φιλ"]), "ref": r.get("Διαιτητής", ""), "var": r.get("VAR", ""),
