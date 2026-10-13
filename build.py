@@ -208,6 +208,22 @@ def round_label(m): return f"{m['round']}η αγωνιστική" + ("" if m["ph
 NOW = datetime.now(timezone(timedelta(hours=3)))
 UPDATED = NOW.strftime("%d/%m/%Y %H:%M")
 
+GA4 = (CFG.get("ga4_id") or "").strip()
+if GA4 and not re.fullmatch(r"G-[A-Z0-9]+", GA4):
+    print(f"Προειδοποίηση: το ga4_id «{GA4}» δεν μοιάζει με κωδικό GA4 (G-XXXXXXX) και αγνοήθηκε.")
+    GA4 = ""
+CONSENT = ""
+if GA4:
+    CONSENT = """<div id="ck" hidden role="dialog" aria-label="Cookies" style="position:fixed;left:16px;right:16px;bottom:calc(16px + env(safe-area-inset-bottom,0px));max-width:560px;margin:0 auto;background:var(--surface);color:var(--ink);border:1px solid var(--line);border-radius:10px;box-shadow:0 6px 24px rgba(0,0,0,.18);padding:14px 16px;z-index:50;font-size:14px">
+<p style="margin:0 0 10px">Με τη συγκατάθεσή σου χρησιμοποιούμε cookies του Google Analytics για να μετράμε την επισκεψιμότητα. <a href="/aporrito/">Περισσότερα</a></p>
+<div style="display:flex;gap:8px;flex-wrap:wrap"><button type="button" data-c="yes" style="font:inherit;font-weight:600;padding:8px 14px;border-radius:6px;border:1px solid var(--ink);background:var(--ink);color:var(--bg);cursor:pointer">Αποδοχή</button><button type="button" data-c="no" style="font:inherit;font-weight:600;padding:8px 14px;border-radius:6px;border:1px solid var(--ink);background:var(--surface);color:var(--ink);cursor:pointer">Απόρριψη</button></div></div>
+<script>(function(){var id="%s",b=document.getElementById("ck"),c;
+function load(){if(window.gtag)return;var s=document.createElement("script");s.async=true;s.src="https://www.googletagmanager.com/gtag/js?id="+id;document.head.appendChild(s);window.dataLayer=window.dataLayer||[];window.gtag=function(){dataLayer.push(arguments)};gtag("js",new Date());gtag("config",id);}
+try{c=localStorage.getItem("rs_consent")}catch(e){}
+if(c==="yes")load();else if(c!=="no")b.hidden=false;
+b.addEventListener("click",function(e){var v=e.target.getAttribute("data-c");if(!v)return;try{localStorage.setItem("rs_consent",v)}catch(x){}b.hidden=true;if(v==="yes")load();});
+var l=document.getElementById("ckset");if(l)l.addEventListener("click",function(e){e.preventDefault();try{localStorage.removeItem("rs_consent")}catch(x){}b.hidden=false;});})();</script>""" % GA4
+
 def page(path, title, desc, body, priority="0.6", canonical=None):
     here = path
     nav = [("", "Ομάδες"), ("diaitites/", "Διαιτητές"), ("agonistiki/", "Αγωνιστικές")] + ([("tilekritiki/", "Τηλεκριτική")] if PH else []) + [("methodologia/", "Μεθοδολογία")]
@@ -240,10 +256,11 @@ def page(path, title, desc, body, priority="0.6", canonical=None):
 </main>
 <footer>
   <p>refstats.gr · Ανεξάρτητη καταγραφή στατιστικών διαιτησίας της Super League. Δεν σχετίζεται με την ΕΠΟ, την ΚΕΔ ή τη Super League.</p>
-  <p>Τελευταία ενημέρωση: {UPDATED} · <a href="{rel(here, "methodologia/")}">Μεθοδολογία</a> · <a href="{rel(here, "aporrito/")}">Πολιτική απορρήτου</a></p>
+  <p>Τελευταία ενημέρωση: {UPDATED} · <a href="{rel(here, "methodologia/")}">Μεθοδολογία</a> · <a href="{rel(here, "aporrito/")}">Πολιτική απορρήτου</a>{' · <a href="#" id="ckset">Ρυθμίσεις cookies</a>' if GA4 else ""}</p>
 </footer>
 </div>
 <script src="{"../" * here.count("/")}assets/app.js" defer></script>
+{CONSENT}
 </body>
 </html>"""
     d = os.path.join(OUT, path)
@@ -605,46 +622,7 @@ def static_pages():
 <h2>Πηγές</h2>
 <p>Ορισμοί της ΚΕΔ, επίσημα φύλλα αγώνα και βίντεο των φάσεων. Κάθε αγώνας και κάθε φάση VAR στη βάση έχει πηγή. Αν βρεις λάθος, στείλε μας την πηγή και θα το διορθώσουμε.</p>
 </div>""", "0.4")
-    page("aporrito/", "Πολιτική απορρήτου · refstats.gr", "Πολιτική απορρήτου του refstats.gr.", """<div class="prose">
-<h1>Πολιτική απορρήτου</h1>
-<p>Το refstats.gr δεν χρησιμοποιεί cookies, δεν ζητά προσωπικά στοιχεία και δεν εμφανίζει διαφημίσεις.</p>
-<p>Η σελίδα φορτώνει γραμματοσειρές από τις Google Fonts, οπότε η Google λαμβάνει τη διεύθυνση IP του επισκέπτη κατά τη φόρτωσή τους. Η φιλοξενία γίνεται στο GitHub Pages, που κρατά τεχνικά αρχεία καταγραφής για λόγους ασφαλείας.</p>
-<p>Αν στο μέλλον προστεθούν μετρήσεις επισκεψιμότητας ή διαφημίσεις, η σελίδα αυτή θα ενημερωθεί πριν από την ενεργοποίησή τους.</p>
-</div>""", "0.1")
-
-# ---------------------------------------------------------------- build
-if os.path.isdir(OUT):
-    shutil.rmtree(OUT)
-os.makedirs(OUT)
-shutil.copytree(os.path.join(ROOT, "assets"), os.path.join(OUT, "assets"))
-home_page(CUR, "")
-for s in SEASONS[1:]:
-    home_page(s, f"sezon/{s}/")
-ROUNDPATHS = {round_path(m) for m in MATCHES}
-for t in sorted({t for m in MATCHES for t in (m["home"], m["away"])}):
-    team_page(t)
-refs_index()
-for p in sorted({p for m in MATCHES for p in (m["ref"], m["var"]) if p}):
-    ref_page(p)
-for s in SEASONS:
-    for first in rounds_of(season_ms(s)):
-        round_page(s, first)
-rounds_index()
-if PH:
-    tilekritiki_index()
-    for c in CRITICS:
-        critic_page(c)
-static_pages()
-# 404, robots, sitemap, CNAME
-page("404/", "Η σελίδα δεν βρέθηκε · refstats.gr", "", f'<h1>Η σελίδα δεν βρέθηκε</h1><p class="lead"><a href="/">Επιστροφή στην αρχική</a></p>', canonical="")
-shutil.move(os.path.join(OUT, "404", "index.html"), os.path.join(OUT, "404.html")); os.rmdir(os.path.join(OUT, "404"))
-open(os.path.join(OUT, "robots.txt"), "w").write(f"User-agent: *\nAllow: /\nSitemap: {SITE}/sitemap.xml\n")
-today = NOW.strftime("%Y-%m-%d")
-open(os.path.join(OUT, "sitemap.xml"), "w", encoding="utf-8").write(
-    '<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'
-    + "".join(f"<url><loc>{esc(SITE + '/' + p)}</loc><lastmod>{today}</lastmod><priority>{pr}</priority></url>\n" for p, pr in PAGES)
-    + "</urlset>\n")
-if CFG.get("custom_domain"):
-    open(os.path.join(OUT, "CNAME"), "w").write(CFG["custom_domain"] + "\n")
-open(os.path.join(OUT, ".nojekyll"), "w").write("")
-print(f"OK: {len(MATCHES)} αγώνες, {sum(len(m['var_items']) for m in MATCHES)} φάσεις VAR, {len(PH)} αμφισβητούμενες φάσεις, {len(PAGES)} σελίδες -> {OUT}")
+    if GA4:
+        priv = """<p>Το refstats.gr δεν ζητά προσωπικά στοιχεία και δεν εμφανίζει διαφημίσεις.</p>
+<h2>Μέτρηση επισκεψιμότητας</h2>
+<p>Χρησιμοποιούμε το Google Analytics 4 για να μετράμε πόσοι επισκέπτονται τις σελίδες και από πού έρχονται. Το Google Analytics φορτώνεται κα
