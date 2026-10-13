@@ -1,4 +1,4 @@
-name: Ενημέρωση site
+.github/name: Ενημέρωση site
 
 on:
   push:
