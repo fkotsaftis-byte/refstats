@@ -625,4 +625,50 @@ def static_pages():
     if GA4:
         priv = """<p>Το refstats.gr δεν ζητά προσωπικά στοιχεία και δεν εμφανίζει διαφημίσεις.</p>
 <h2>Μέτρηση επισκεψιμότητας</h2>
-<p>Χρησιμοποιούμε το Google Analytics 4 για να μετράμε πόσοι επισκέπτονται τις σελίδες και από πού έρχονται. Το Google Analytics φορτώνεται κα
+<p>Χρησιμοποιούμε το Google Analytics 4 για να μετράμε πόσοι επισκέπτονται τις σελίδες και από πού έρχονται. Το Google Analytics φορτώνεται και αποθηκεύει cookies <b>μόνο αν πατήσεις «Αποδοχή»</b> στο σχετικό μήνυμα. Αν πατήσεις «Απόρριψη», δεν φορτώνεται καθόλου. Μπορείς να αλλάξεις την επιλογή σου οποτεδήποτε από τον σύνδεσμο «Ρυθμίσεις cookies» στο κάτω μέρος κάθε σελίδας.</p>
+<p>Τα δεδομένα επεξεργάζεται η Google σύμφωνα με τους <a href="https://policies.google.com/privacy" rel="noopener" target="_blank">όρους απορρήτου της</a>. Η επιλογή σου αποθηκεύεται μόνο στον browser σου.</p>"""
+    else:
+        priv = "<p>Το refstats.gr δεν χρησιμοποιεί cookies, δεν ζητά προσωπικά στοιχεία και δεν εμφανίζει διαφημίσεις.</p>"
+    page("aporrito/", "Πολιτική απορρήτου · refstats.gr", "Πολιτική απορρήτου του refstats.gr.", f"""<div class="prose">
+<h1>Πολιτική απορρήτου</h1>
+{priv}
+<h2>Γραμματοσειρές και φιλοξενία</h2>
+<p>Η σελίδα φορτώνει γραμματοσειρές από τις Google Fonts, οπότε η Google λαμβάνει τη διεύθυνση IP του επισκέπτη κατά τη φόρτωσή τους. Η φιλοξενία γίνεται στο GitHub Pages, που κρατά τεχνικά αρχεία καταγραφής για λόγους ασφαλείας.</p>
+</div>""", "0.1")
+
+# ---------------------------------------------------------------- build
+if os.path.isdir(OUT):
+    shutil.rmtree(OUT)
+os.makedirs(OUT)
+shutil.copytree(os.path.join(ROOT, "assets"), os.path.join(OUT, "assets"))
+home_page(CUR, "")
+for s in SEASONS[1:]:
+    home_page(s, f"sezon/{s}/")
+ROUNDPATHS = {round_path(m) for m in MATCHES}
+for t in sorted({t for m in MATCHES for t in (m["home"], m["away"])}):
+    team_page(t)
+refs_index()
+for p in sorted({p for m in MATCHES for p in (m["ref"], m["var"]) if p}):
+    ref_page(p)
+for s in SEASONS:
+    for first in rounds_of(season_ms(s)):
+        round_page(s, first)
+rounds_index()
+if PH:
+    tilekritiki_index()
+    for c in CRITICS:
+        critic_page(c)
+static_pages()
+# 404, robots, sitemap, CNAME
+page("404/", "Η σελίδα δεν βρέθηκε · refstats.gr", "", f'<h1>Η σελίδα δεν βρέθηκε</h1><p class="lead"><a href="/">Επιστροφή στην αρχική</a></p>', canonical="")
+shutil.move(os.path.join(OUT, "404", "index.html"), os.path.join(OUT, "404.html")); os.rmdir(os.path.join(OUT, "404"))
+open(os.path.join(OUT, "robots.txt"), "w").write(f"User-agent: *\nAllow: /\nSitemap: {SITE}/sitemap.xml\n")
+today = NOW.strftime("%Y-%m-%d")
+open(os.path.join(OUT, "sitemap.xml"), "w", encoding="utf-8").write(
+    '<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'
+    + "".join(f"<url><loc>{esc(SITE + '/' + p)}</loc><lastmod>{today}</lastmod><priority>{pr}</priority></url>\n" for p, pr in PAGES)
+    + "</urlset>\n")
+if CFG.get("custom_domain"):
+    open(os.path.join(OUT, "CNAME"), "w").write(CFG["custom_domain"] + "\n")
+open(os.path.join(OUT, ".nojekyll"), "w").write("")
+print(f"OK: {len(MATCHES)} αγώνες, {sum(len(m['var_items']) for m in MATCHES)} φάσεις VAR, {len(PH)} αμφισβητούμενες φάσεις, {len(PAGES)} σελίδες -> {OUT}")
