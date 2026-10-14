@@ -527,25 +527,63 @@ def ref_page(p):
     page(path, f"{p}: διαιτητής Super League, στατιστικά · refstats.gr",
          f"Ο διαιτητής {p} στη Super League: αγώνες, πέναλτι και κάρτες ανά αγώνα, επεμβάσεις VAR και ισοζύγιο κάθε ομάδας μαζί του.", body="\n".join(blocks), priority="0.7")
 
+def other(m, t): return m["away"] if t == m["home"] else m["home"] if t == m["away"] else ""
+
+def match_chips(m):
+    """Short labelled chips: what the refereeing produced in this match, per team."""
+    chips = []
+    vpen = defaultdict(int); vred = defaultdict(int); vann = defaultdict(int)
+    for v in m["var_items"]:
+        t, b = v["type"], v["ben"]
+        o = other(m, b)
+        if t == "Δόθηκε πέναλτι":
+            chips.append(("c-green", f"VAR: πέναλτι · {b}")); vpen[b] += 1
+        elif t == "Ακυρώθηκε πέναλτι":
+            chips.append(("c-teal", f"VAR: ακυρώθηκε πέναλτι · {o}"))
+        elif t == "Δόθηκε κόκκινη":
+            chips.append(("c-wine", f"VAR: κόκκινη · {o}")); vred[o] += 1
+        elif t == "Ακυρώθηκε κόκκινη":
+            chips.append(("c-wine2", f"VAR: ακυρώθηκε κόκκινη · {b}"))
+        elif t == "Ακυρώθηκε γκολ":
+            chips.append(("c-purple", f"VAR: ακυρώθηκε γκολ · {o}")); vann[o] += 1
+        elif t == "Κατοχυρώθηκε γκολ":
+            chips.append(("c-blue", f"VAR: κατοχυρώθηκε γκολ · {b}"))
+        else:
+            chips.append(("c-grey", f"VAR: {t}"))
+    for side_, team in (("h", m["home"]), ("a", m["away"])):
+        n = m["pen_" + side_] - vpen[team]
+        if n > 0: chips.append(("c-orange", f"Πέναλτι{' ×' + str(n) if n > 1 else ''} · {team}"))
+    for side_, team in (("h", m["home"]), ("a", m["away"])):
+        n = m["red_" + side_] - vred[team]
+        if n > 0: chips.append(("c-red", f"Κόκκινη{' ×' + str(n) if n > 1 else ''} · {team}"))
+    for side_, team in (("h", m["home"]), ("a", m["away"])):
+        n = m["ann_" + side_] - vann[team]
+        if n > 0: chips.append(("c-lilac", f"Ακυρωμένο γκολ{' ×' + str(n) if n > 1 else ''} · {team}"))
+    return chips
+
+def match_card(here, m, detail=False):
+    chips = match_chips(m)
+    ch = "".join(f'<i class="mc {c}">{esc(t)}</i>' for c, t in chips) or '<i class="mc c-quiet">Ήσυχο παιχνίδι</i>'
+    y = m["yel_h"] + m["yel_a"]
+    v = ""
+    if detail:
+        v = "".join(f'<div class="vx"><b>{esc(x["min"])}\'</b> {esc(x["type"])} · υπέρ {esc(x["ben"] or "—")}<span>{esc(x["desc"])}</span></div>' for x in m["var_items"])
+    return (f'<article class="m{" busy" if len(chips) >= 3 else ""}"><div class="sc"><span class="h">{team_link(here, m["home"])}</span><b>{m["gh"]}–{m["ga"]}</b><span class="a">{team_link(here, m["away"])}</span></div>'
+            f'<div class="ref">{fdate(m["date"])} · Διαιτητής: {ref_link(here, m["ref"])} · VAR: {ref_link(here, m["var"])} · {y} κίτριν{"η" if y == 1 else "ες"}</div>'
+            f'<div class="chips2">{ch}</div>{v}</article>')
+
 def round_page(s, first):
     ms = [m for m in MATCHES if m["season"] == s and m["phase"] == first["phase"] and m["round"] == first["round"]]
     path = round_path(first)
     allr = rounds_of(season_ms(s)); i = [round_path(x) for x in allr].index(path)
     prev = f'<a href="{rel(path, round_path(allr[i-1]))}">← {round_label(allr[i-1])}</a>' if i > 0 else "<span></span>"
     nxt = f'<a href="{rel(path, round_path(allr[i+1]))}">{round_label(allr[i+1])} →</a>' if i < len(allr) - 1 else "<span></span>"
-    cards = []
-    for m in ms:
-        v = "".join(f'<div class="vx"><b>{esc(x["min"])}\'</b> {esc(x["type"])} · υπέρ {esc(x["ben"] or "—")}<span>{esc(x["desc"])}</span></div>' for x in m["var_items"])
-        p = m["pen_h"] + m["pen_a"]; r = m["red_h"] + m["red_a"]
-        y = m["yel_h"] + m["yel_a"]
-        ev = (f'<i class="y">{y} κίτριν{"η" if y == 1 else "ες"}</i>' + (f'<i class="r">{r} κόκκιν{"ες" if r > 1 else "η"}</i>' if r else "")
-              + (f'<i class="p">{p} πέναλτι</i>' if p else "") + (f'<i class="v">{len(m["var_items"])} VAR</i>' if m["var_items"] else ""))
-        cards.append(f'<article class="m"><div class="sc"><span class="h">{team_link(path, m["home"])}</span><b>{m["gh"]}–{m["ga"]}</b><span class="a">{team_link(path, m["away"])}</span></div>'
-                     f'<div class="ref">{fdate(m["date"])} · Διαιτητής: {ref_link(path, m["ref"])} · VAR: {ref_link(path, m["var"])}</div><div class="ev">{ev}</div>{v}</article>')
+    cards = [match_card(path, m, detail=True) for m in ms]
     body = f"""<p class="crumb"><a href="{rel(path, "agonistiki/")}">Αγωνιστικές</a> / {s} / {round_label(first)}</p>
 <h1>Η διαιτησία της {round_gen(first)} · Super League {s}</h1>
-<p class="lead">Διαιτητές, πέναλτι, κάρτες και επεμβάσεις VAR σε κάθε αγώνα.</p>
+<p class="lead">Τι άφησε η διαιτησία σε κάθε αγώνα: πέναλτι, κόκκινες, ακυρωμένα γκολ και επεμβάσεις VAR.</p>
 <div class="matches">{"".join(cards)}</div>
+<p class="note">Οι ετικέτες «VAR:» είναι αποφάσεις που άλλαξαν μετά από επέμβαση του VAR· οι υπόλοιπες δόθηκαν από τον διαιτητή στο γήπεδο. Είναι νούμερα, όχι κατηγορίες.</p>
 {round_ph(path, ms)}
 <div class="pager">{prev}{nxt}</div>"""
     page(path, f"Διαιτησία {round_gen(first)} Super League {s} · refstats.gr",
@@ -559,13 +597,21 @@ def round_ph(path, ms):
 
 def rounds_index():
     path = "agonistiki/"
+    latest = ""
+    if CUR and season_ms(CUR):
+        last = rounds_of(season_ms(CUR))[-1]
+        ms = [m for m in MATCHES if m["season"] == CUR and m["phase"] == last["phase"] and m["round"] == last["round"]]
+        latest = (f'<div class="headrow"><div><h2 style="margin-top:6px">Τελευταία αγωνιστική: {last["round"]}η{"" if last["phase"] == "Κανονική" else " (" + last["phase"] + ")"}</h2>'
+                  f'<p class="lead">Super League {CUR} · τι άφησε η διαιτησία, αγώνα προς αγώνα. <a href="{rel(path, round_path(last))}">Λεπτομέρειες και φάσεις VAR →</a></p></div></div>'
+                  f'<div class="matches two">{"".join(match_card(path, m) for m in ms)}</div>'
+                  '<p class="note">Οι ετικέτες «VAR:» είναι αποφάσεις που άλλαξαν μετά από επέμβαση του VAR. Είναι νούμερα, όχι κατηγορίες.</p>')
     parts = []
-    for s in SEASONS:
-        links = "".join(f'<a href="{rel(path, round_path(m))}">{m["round"]}{"" if m["phase"] == "Κανονική" else " " + esc(m["phase"])}</a>' for m in rounds_of(season_ms(s)))
-        parts.append(f'<h2>Σεζόν {s}</h2><div class="roundlinks">{links}</div>')
+    for s_ in SEASONS:
+        links = "".join(f'<a href="{rel(path, round_path(m))}">{m["round"]}{"" if m["phase"] == "Κανονική" else " " + esc(m["phase"])}</a>' for m in rounds_of(season_ms(s_)))
+        parts.append(f'<h2>Σεζόν {s_}</h2><div class="roundlinks">{links}</div>')
     page(path, "Αγωνιστικές Super League: διαιτητές και VAR · refstats.gr",
-         "Όλες οι αγωνιστικές της Super League με τους διαιτητές, τα πέναλτι, τις κάρτες και τις επεμβάσεις VAR κάθε αγώνα.",
-         "<h1>Αγωνιστικές</h1>" + "".join(parts), "0.5")
+         "Η τελευταία αγωνιστική της Super League και όλες οι προηγούμενες, με τους διαιτητές, τα πέναλτι, τις κόκκινες και τις επεμβάσεις VAR κάθε αγώνα.",
+         "<h1>Αγωνιστικές</h1>" + latest + '<h2 style="margin-top:34px">Όλες οι αγωνιστικές</h2>' + "".join(parts).replace("<h2>", "<h3>").replace("</h2>", "</h3>"), "0.7")
 
 VSYM = {"Σωστή": ("✓", "ok"), "Λάθος": ("✗", "bad"), "Οριακή": ("≈", "mid")}
 def ph_anchor(p): return "f-" + slugify(p["code"])
