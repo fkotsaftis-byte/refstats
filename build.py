@@ -307,6 +307,67 @@ def rounds_of(ms):
     for m in ms: seen.setdefault((PHASE_ORDER.get(m["phase"], 9), m["round"], m["phase"]), m)
     return [seen[k] for k in sorted(seen)]
 
+def _leader(items, key, low=False):
+    """items: list of (name, value). Returns (value, [names]) for the max (or min)."""
+    items = [x for x in items if x[1] is not None]
+    if not items: return None, []
+    v = (min if low else max)(x[1] for x in items)
+    return v, sorted(n for n, x in items if x == v)
+
+def podiums(here, ms, T):
+    if not ms: return ""
+    n = len(ms)
+    pen = sum(m["pen_h"] + m["pen_a"] for m in ms); red = sum(m["red_h"] + m["red_a"] for m in ms)
+    yel = sum(m["yel_h"] + m["yel_a"] for m in ms); var = sum(len(m["var_items"]) for m in ms)
+    vann = defaultdict(int)
+    for m in ms:
+        for v in m["var_items"]:
+            if v["type"] == "Ακυρώθηκε γκολ" and v["ben"] in (m["home"], m["away"]):
+                vann[m["away"] if v["ben"] == m["home"] else m["home"]] += 1
+    strip = (f'<div class="tot"><span class="t-pen"><b>{pen}</b> πέναλτι</span><span class="t-red"><b>{red}</b> κόκκινες</span>'
+             f'<span class="t-ann"><b>{sum(vann.values())}</b> γκολ ακυρώθηκαν από VAR</span><span class="t-var"><b>{var}</b> επεμβάσεις VAR</span>'
+             f'<span class="t-yel"><b>{yel}</b> κίτρινες</span><span class="t-n">{n} αγώνες</span></div>')
+    nt = len(T) or 1
+    by = {t["team"]: t for t in T}
+    def names(lst, kind):
+        if not lst: return "—"
+        link = (lambda x: team_link(here, x)) if kind == "team" else (lambda x: ref_link(here, x))
+        return ", ".join(link(x) for x in lst[:2]) + (f" +{len(lst) - 2}" if len(lst) > 2 else "")
+    cards = []
+    def card(cls_, label, val, sub, who, kind):
+        tag = '<i class="rf">ΔΙΑΙΤ.</i>' if kind == "ref" else ""
+        cards.append(f'<div class="pod {cls_}"><span class="pl">{label}</span><b class="pv">{val}</b><span class="ps">{sub}</span>'
+                     f'<span class="pw">{tag}{names(who, kind)}</span></div>')
+    v, w = _leader([(t["team"], t["saldo"]) for t in T], "saldo")
+    card("c-green", "Θετικότερο ισοζύγιο", sg(v), "ισοζύγιο διαιτησίας", w, "team")
+    v, w = _leader([(t["team"], t["saldo"]) for t in T], "saldo", low=True)
+    card("c-red", "Αρνητικότερο ισοζύγιο", sg(v), "ισοζύγιο διαιτησίας", w, "team")
+    avgp = sum(t["pen_for"] for t in T) / nt
+    v, w = _leader([(t["team"], t["pen_for"]) for t in T], "pen_for")
+    card("c-orange", "Περισσότερα πέναλτι υπέρ", v, f"πέναλτι · μέσος όρος {avgp:.1f}".replace(".", ","), w, "team")
+    v, w = _leader([(t["team"], t["pen_against"]) for t in T], "pen_against")
+    card("c-purple", "Περισσότερα πέναλτι κατά", v, f"πέναλτι · μέσος όρος {avgp:.1f}".replace(".", ","), w, "team")
+    avgr = sum(t["red_own"] for t in T) / nt
+    v, w = _leader([(t["team"], t["red_own"]) for t in T], "red_own")
+    card("c-wine", "Περισσότερες κόκκινες", v, f"αποβολές · μέσος όρος {avgr:.1f}".replace(".", ","), w, "team")
+    if vann:
+        v, w = _leader(list(vann.items()), "ann")
+        card("c-blue", "Το VAR ακύρωσε τα περισσότερα γκολ", v, "ακυρωμένα γκολ μετά από VAR", w, "team")
+    else:
+        card("c-blue", "Το VAR ακύρωσε τα περισσότερα γκολ", 0, "κανένα γκολ δεν ακυρώθηκε από VAR", [], "team")
+    byref = defaultdict(list)
+    for m in ms:
+        if m["ref"]: byref[m["ref"]].append(m)
+    mn = 3 if any(len(l) >= 3 for l in byref.values()) else 1
+    rs = {p: l for p, l in byref.items() if len(l) >= mn}
+    cpm = [(p, round(sum(m["yel_h"] + m["yel_a"] + m["red_h"] + m["red_a"] for m in l) / len(l), 1)) for p, l in rs.items()]
+    v, w = _leader(cpm, "c")
+    card("c-yellow", "Ο πιο αυστηρός διαιτητής", f"{v:.1f}".replace(".", ",") if v is not None else "—", f"κάρτες ανά αγώνα · τουλάχιστον {mn} αγώνες", w, "ref")
+    ppm = [(p, round(sum(m["pen_h"] + m["pen_a"] for m in l) / len(l), 2)) for p, l in rs.items()]
+    v, w = _leader(ppm, "p")
+    card("c-pink", "Ο διαιτητής των πέναλτι", f"{v:.2f}".rstrip("0").rstrip(".").replace(".", ",") if v is not None else "—", f"πέναλτι ανά αγώνα · τουλάχιστον {mn} αγώνες", w, "ref")
+    return f'{strip}<h2 class="podh"><span>Τα ρεκόρ της σεζόν</span></h2><div class="pods">{"".join(cards)}</div>'
+
 def home_page(s, path):
     ms = season_ms(s)
     teams = sorted({t for m in ms for t in (m["home"], m["away"])})
@@ -315,6 +376,8 @@ def home_page(s, path):
     nvar = sum(len(m["var_items"]) for m in ms)
     body = f"""<div class="headrow"><div><h1>Ισοζύγιο διαιτησίας Super League {s}</h1>
 <p class="lead">{len(ms)} αγώνες · {nvar} επεμβάσεις VAR που άλλαξαν απόφαση{f' · έως την <a href="{rel(path, round_path(last))}">{round_label(last)}</a>' if last else ''}.</p></div>{season_switch(path, s)}</div>
+{podiums(path, ms, T)}
+<h2>Ισοζύγιο ανά ομάδα</h2>
 {board(path, T)}
 <p class="note">Το ισοζύγιο μετράει αποφάσεις, όχι λάθη. Μια ομάδα που επιτίθεται περισσότερο κερδίζει φυσιολογικά περισσότερα πέναλτι. Δες τη <a href="{rel(path, "methodologia/")}">μεθοδολογία</a>.</p>"""
     title = f"Στατιστικά διαιτησίας Super League {s} · refstats.gr" if path == "" else f"Ισοζύγιο διαιτησίας Super League {s} · refstats.gr"
