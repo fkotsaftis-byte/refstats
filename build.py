@@ -275,7 +275,7 @@ METRICS = [
     ("pen_against", "Πέναλτι κατά", "Πέναλτι που δόθηκαν κατά της ομάδας."),
     ("var_for", "VAR υπέρ", "Επεμβάσεις VAR που άλλαξαν απόφαση υπέρ της ομάδας."),
     ("var_against", "VAR κατά", "Επεμβάσεις VAR που άλλαξαν απόφαση κατά της ομάδας."),
-    ("ann", "Ακυρωμένα γκολ", "Γκολ της ομάδας που δεν μέτρησαν."),
+    ("ann", "Ακυρωθέντα γκολ", "Γκολ της ομάδας που δεν μέτρησαν."),
     ("red_own", "Κόκκινες", "Αποβολές παικτών της ομάδας (μαζί με τη 2η κίτρινη)."),
     ("yel", "Κίτρινες", "Κίτρινες κάρτες σε παίκτες της ομάδας."),
     ("foul", "Φάουλ", "Φάουλ που έκανε η ομάδα."),
@@ -352,7 +352,7 @@ def podiums(here, ms, T):
     card("c-wine", "Περισσότερες κόκκινες", v, f"αποβολές · μέσος όρος {avgr:.1f}".replace(".", ","), w, "team")
     if vann:
         v, w = _leader(list(vann.items()), "ann")
-        card("c-blue", "Το VAR ακύρωσε τα περισσότερα γκολ", v, "ακυρωμένα γκολ μετά από VAR", w, "team")
+        card("c-blue", "Το VAR ακύρωσε τα περισσότερα γκολ", v, ("ακυρωθέν γκολ" if v == 1 else "ακυρωθέντα γκολ") + " μετά από VAR", w, "team")
     else:
         card("c-blue", "Το VAR ακύρωσε τα περισσότερα γκολ", 0, "κανένα γκολ δεν ακυρώθηκε από VAR", [], "team")
     byref = defaultdict(list)
@@ -558,19 +558,19 @@ def match_chips(m):
         if n > 0: chips.append(("c-red", f"Κόκκινη{' ×' + str(n) if n > 1 else ''} · {team}"))
     for side_, team in (("h", m["home"]), ("a", m["away"])):
         n = m["ann_" + side_] - vann[team]
-        if n > 0: chips.append(("c-lilac", f"Ακυρωμένο γκολ{' ×' + str(n) if n > 1 else ''} · {team}"))
+        if n > 0: chips.append(("c-lilac", ("Ακυρωθέν γκολ" if n == 1 else f"Ακυρωθέντα γκολ ×{n}") + f" · {team}"))
     return chips
 
 def match_card(here, m, detail=False):
     chips = match_chips(m)
-    ch = "".join(f'<i class="mc {c}">{esc(t)}</i>' for c, t in chips) or '<i class="mc c-quiet">Ήσυχο παιχνίδι</i>'
+    ch = "".join(f'<i class="mc {c}">{esc(t)}</i>' for c, t in chips)
     y = m["yel_h"] + m["yel_a"]
     v = ""
     if detail:
         v = "".join(f'<div class="vx"><b>{esc(x["min"])}\'</b> {esc(x["type"])} · υπέρ {esc(x["ben"] or "—")}<span>{esc(x["desc"])}</span></div>' for x in m["var_items"])
     return (f'<article class="m{" busy" if len(chips) >= 3 else ""}"><div class="sc"><span class="h">{team_link(here, m["home"])}</span><b>{m["gh"]}–{m["ga"]}</b><span class="a">{team_link(here, m["away"])}</span></div>'
             f'<div class="ref">{fdate(m["date"])} · Διαιτητής: {ref_link(here, m["ref"])} · VAR: {ref_link(here, m["var"])} · {y} κίτριν{"η" if y == 1 else "ες"}</div>'
-            f'<div class="chips2">{ch}</div>{v}</article>')
+            + (f'<div class="chips2">{ch}</div>' if ch else '') + f'{v}</article>')
 
 def round_page(s, first):
     ms = [m for m in MATCHES if m["season"] == s and m["phase"] == first["phase"] and m["round"] == first["round"]]
@@ -581,7 +581,7 @@ def round_page(s, first):
     cards = [match_card(path, m, detail=True) for m in ms]
     body = f"""<p class="crumb"><a href="{rel(path, "agonistiki/")}">Αγωνιστικές</a> / {s} / {round_label(first)}</p>
 <h1>Η διαιτησία της {round_gen(first)} · Super League {s}</h1>
-<p class="lead">Τι άφησε η διαιτησία σε κάθε αγώνα: πέναλτι, κόκκινες, ακυρωμένα γκολ και επεμβάσεις VAR.</p>
+<p class="lead">Τι άφησε η διαιτησία σε κάθε αγώνα: πέναλτι, κόκκινες, ακυρωθέντα γκολ και επεμβάσεις VAR.</p>
 <div class="matches">{"".join(cards)}</div>
 <p class="note">Οι ετικέτες «VAR:» είναι αποφάσεις που άλλαξαν μετά από επέμβαση του VAR· οι υπόλοιπες δόθηκαν από τον διαιτητή στο γήπεδο. Είναι νούμερα, όχι κατηγορίες.</p>
 {round_ph(path, ms)}
@@ -723,7 +723,7 @@ def static_pages():
 <h2>Κάρτες και γκολ</h2>
 <ul><li>Κόκκινες: απευθείας κόκκινες και αποβολές με δεύτερη κίτρινη. Η δεύτερη κίτρινη δεν μετράει στις κίτρινες.</li>
 <li>Κάρτες σε προπονητές και πάγκο δεν μετράνε.</li>
-<li>Ακυρωμένα γκολ: γκολ της ομάδας που δεν μέτρησαν, είτε από τον διαιτητή ή τον βοηθό είτε μετά από VAR.</li></ul>
+<li>Ακυρωθέντα γκολ: γκολ της ομάδας που δεν μέτρησαν, είτε από τον διαιτητή ή τον βοηθό είτε μετά από VAR.</li></ul>
 <h2>Τι δεν δείχνουν τα νούμερα</h2>
 <p>Ένα θετικό ισοζύγιο δεν σημαίνει εύνοια. Μια ομάδα που επιτίθεται περισσότερο κερδίζει περισσότερα πέναλτι. Γι' αυτό στις σελίδες ομάδων και διαιτητών συγκρίνουμε κάθε ομάδα με τον δικό της μέσο όρο. Συνδυασμοί διαιτητή και ομάδας με λιγότερους από 5 αγώνες σημειώνονται ως μικρό δείγμα.</p>
 <h2>Τηλεκριτική</h2>
