@@ -171,3 +171,15 @@ table.ph th.cn{min-width:60px;font-size:10.5px}
 .mc.c-quiet{background:var(--bg);color:var(--muted);border:1px solid var(--line)}
 .m .ref{font-size:12px}
 .roundlinks + h3,h3 + .roundlinks{margin-top:8px}
+/* τηλεκριτική: με ποιον πάει */
+table.ph td.v.ref,table.ph td.v.tm{font-family:var(--body);font-size:12px;font-weight:600;white-space:nowrap}
+table.ph td.v.ref{color:var(--muted)}
+table.ph td.v.tm{color:var(--ink);background:color-mix(in srgb,var(--card) 30%,transparent)}
+table.lean td.few{color:var(--muted);font-size:13px;text-align:center}
+table.lean td.dd.up{color:#9A6B00}table.lean td.dd.dn{color:#3B6FB6}
+table.hmap td.hm{text-align:center;font-family:var(--display);font-weight:700;font-size:16px;min-width:48px;cursor:help}
+table.hmap td.hm.nil{color:var(--line)}
+table.hmap th{text-align:center}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) table.lean td.dd.up{color:var(--card)}:root:not([data-theme="light"]) table.lean td.dd.dn{color:#7FA6E0}}
+:root[data-theme="dark"] table.lean td.dd.up{color:var(--card)}:root[data-theme="dark"] table.lean td.dd.dn{color:#7FA6E0}
+table.hmap th:first-child,table.hmap td:first-child{position:sticky;left:0;background:var(--surface);z-index:1;box-shadow:1px 0 0 var(--line)}
