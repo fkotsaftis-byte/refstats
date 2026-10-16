@@ -167,6 +167,48 @@ def consensus(p):
     if not ok and not bad: return None, ok, bad
     return ("Λάθος" if bad > ok else "Σωστή" if ok > bad else "Ισοψηφία"), ok, bad
 
+# ---- who did each critic side with: the referee or the team that protested
+SHORT = {"Ολυμπιακός": "ΟΛΥ", "Παναθηναϊκός": "ΠΑΟ", "ΑΕΚ": "ΑΕΚ", "ΠΑΟΚ": "ΠΑΟΚ", "Άρης": "ΑΡΗΣ", "ΟΦΗ": "ΟΦΗ",
+         "Αστέρας Τρίπολης": "ΑΣΤ", "Ατρόμητος": "ΑΤΡ", "Βόλος": "ΒΟΛ", "Ηρακλής": "ΗΡΑ", "Καλαμάτα": "ΚΑΛ",
+         "Κηφισιά": "ΚΗΦ", "Λεβαδειακός": "ΛΕΒ", "Παναιτωλικός": "ΠΑΝ", "Λαμία": "ΛΑΜ", "Πανσερραϊκός": "ΠΣΕ",
+         "Αστέρας Aktor": "ΑΣΤ", "ΑΕΛ": "ΑΕΛ", "Athens Kallithea": "ΚΑΛΛ", "Athens Kallithea FC": "ΚΑΛΛ"}
+def short(t): return SHORT.get(t, t)
+def protester(p):
+    m = p["m"]
+    if p["ben"] == m["home"]: return m["away"]
+    if p["ben"] == m["away"]: return m["home"]
+    return None
+MIN_N = 5  # fewer decisive phases than this: no percentage is shown
+def is_tele(name): return CRIT[name]["kind"] != "Δημοσιογράφος"
+def _pro(p, team, v):
+    """True if verdict v favours `team`: it protested and the critic said Λάθος,
+    or the opponent protested and the critic said Σωστή."""
+    return (v == "Λάθος") if protester(p) == team else (v == "Σωστή")
+def lean(cname, team, mode):
+    """mode 'prot': phases where `team` protested · 'opp': where its opponent protested · 'all': both.
+    Returns (n, rate of the critic in favour of team, rate of the other τηλεκριτικοί on the same phases)."""
+    sel = []
+    for p in PH:
+        pr = protester(p)
+        if not pr or team not in (p["m"]["home"], p["m"]["away"]): continue
+        if mode == "prot" and pr != team: continue
+        if mode == "opp" and pr == team: continue
+        o = p["ops"].get(cname)
+        if o and o["v"] in ("Σωστή", "Λάθος"): sel.append((p, o["v"]))
+    n = len(sel)
+    if not n: return 0, None, None
+    mine = sum(1 for p, v in sel if _pro(p, team, v)) / n
+    oth = [(p, o["v"]) for p, _ in sel for c, o in p["ops"].items() if c != cname and is_tele(c) and o["v"] in ("Σωστή", "Λάθος")]
+    others = sum(1 for p, v in oth if _pro(p, team, v)) / len(oth) if oth else None
+    return n, mine, others
+def lean_teams():
+    ts = {}
+    for p in PH:
+        if protester(p):
+            for t in (p["m"]["home"], p["m"]["away"]): ts[t] = ts.get(t, 0) + 1
+    big = {"Ολυμπιακός": 0, "Παναθηναϊκός": 1, "ΑΕΚ": 2, "ΠΑΟΚ": 3, "Άρης": 4}
+    return [t for t, _ in sorted(ts.items(), key=lambda x: (big.get(x[0], 9), -x[1], x[0]))]
+
 # ---------------------------------------------------------------- stats
 KEYS = ["n", "pen_for", "pen_against", "var_for", "var_against", "red_opp", "red_own", "yel", "yel_opp", "foul", "ann", "w", "d", "l"]
 def side(m, team):
@@ -627,9 +669,9 @@ def cons_cell(p):
 def phase_table(here, phases):
     cols = [c for c in CRITICS if any(c["name"] in p["ops"] for p in phases)]
     tele = [c for c in cols if c["kind"] != "Δημοσιογράφος"]; jour = [c for c in cols if c["kind"] == "Δημοσιογράφος"]
-    g = (f'<tr class="grp"><th colspan="3"></th>' + (f'<th colspan="{len(tele)}">Τηλεκριτικοί</th>' if tele else "")
+    g = (f'<tr class="grp"><th colspan="4"></th>' + (f'<th colspan="{len(tele)}">Τηλεκριτικοί</th>' if tele else "")
          + (f'<th colspan="{len(jour)}" class="j">Δημοσιογράφοι</th>' if jour else "") + '</tr>')
-    hh = ('<tr><th class="l">Φάση</th><th class="l">Απόφαση</th><th>Κατά τους τηλεκριτικούς</th>' + "".join(f'<th class="cn"><a href="{rel(here, "tilekritiki/" + c["slug"] + "/")}">{esc(c["name"])}</a></th>' for c in tele)
+    hh = ('<tr><th class="l">Φάση</th><th class="l">Διαμαρτυρήθηκε</th><th class="l">Απόφαση</th><th>Κατά τους τηλεκριτικούς</th>' + "".join(f'<th class="cn"><a href="{rel(here, "tilekritiki/" + c["slug"] + "/")}">{esc(c["name"])}</a></th>' for c in tele)
           + "".join(f'<th class="cn j"><a href="{rel(here, "tilekritiki/" + c["slug"] + "/")}">{esc(c["name"])}</a></th>' for c in jour) + '</tr>')
     rws = []
     for p in phases:
@@ -637,15 +679,18 @@ def phase_table(here, phases):
         for c in tele + jour:
             o = p["ops"].get(c["name"]); j = " j" if c["kind"] == "Δημοσιογράφος" else ""
             if o:
-                sym, k = VSYM[o["v"]]
+                pr = protester(p)
+                if o["v"] == "Οριακή": lab, k = "≈", "mid"
+                elif o["v"] == "Σωστή" or not pr: lab, k = ("Διαιτητής", "ref") if o["v"] == "Σωστή" else ("✗", "bad")
+                else: lab, k = short(pr), "tm"
                 tip = o["v"] + (f' · έπρεπε: {o["should"]}' if o["should"] else "") + (f' · {o["why"]}' if o["why"] else "")
-                cells.append(f'<td class="v {k}{j}" title="{esc(tip)}">{sym}</td>')
+                cells.append(f'<td class="v {k}{j}" title="{esc(tip)}">{esc(lab)}</td>')
             else:
                 cells.append(f'<td class="v nil{j}">·</td>')
         dec = esc(p["dec"]) + (' <span class="pill">VAR</span>' if p["var"] else "")
-        rws.append(f'<tr><td class="l">{ph_where(here, p)}<span class="sub">{esc(p["cat"])}</span></td><td class="l">{dec}</td>{cons_cell(p)}{"".join(cells)}</tr>')
+        rws.append(f'<tr><td class="l">{ph_where(here, p)}<span class="sub">{esc(p["cat"])}</span></td><td class="l"><b>{esc(protester(p) or "—")}</b></td><td class="l">{dec}</td>{cons_cell(p)}{"".join(cells)}</tr>')
     return (f'<div class="tablewrap"><table class="t ph">{g}{hh}{"".join(rws)}</table></div>'
-            '<p class="note">✓ σωστή απόφαση · ✗ λάθος · ≈ οριακή · · δεν τοποθετήθηκε. Η στήλη «Κατά τους τηλεκριτικούς» είναι η πλειοψηφία μόνο των τηλεκριτικών (σωστή–λάθος). Πέρασε τον δείκτη πάνω από ένα σύμβολο για την αιτιολογία.</p>')
+            '<p class="note">Σε κάθε κελί, με ποιον πήγε ο σχολιαστής: «Διαιτητής» αν έκρινε την απόφαση σωστή, η ομάδα που διαμαρτυρήθηκε αν την έκρινε λάθος. ≈ οριακή · · δεν τοποθετήθηκε. Η στήλη «Κατά τους τηλεκριτικούς» είναι η πλειοψηφία μόνο των τηλεκριτικών (σωστή–λάθος). Πέρασε τον δείκτη πάνω από ένα κελί για την αιτιολογία.</p>')
 def phase_details(here, phases):
     out = []
     for p in phases:
@@ -672,6 +717,50 @@ def team_errors(team, phases):
             if p["ben"] == team: plus += 1
             elif team in (p["m"]["home"], p["m"]["away"]): minus += 1
     return plus, minus
+def _pct(x): return f"{round(100 * x)}%"
+def _diff(a, b):
+    if a is None or b is None: return None
+    return round(100 * (a - b))
+def _dcell(d):
+    if d is None: return '<td>—</td>'
+    k = "up" if d >= 10 else "dn" if d <= -10 else ""
+    return f'<td class="dd {k}"><b>{"+" if d > 0 else "−" if d < 0 else ""}{abs(d)}</b></td>'
+def lean_table(cname, mode):
+    rws = []
+    for t in lean_teams():
+        n, mine, oth = lean(cname, t, mode)
+        if not n: continue
+        if n < MIN_N:
+            rws.append((n, f'<tr><td class="l">{esc(t)}</td><td>{n}</td><td colspan="3" class="few">λίγες φάσεις ακόμα</td></tr>'))
+        else:
+            rws.append((n + 1000, f'<tr><td class="l">{esc(t)}</td><td>{n}</td><td>{_pct(mine)}</td><td>{_pct(oth) if oth is not None else "—"}</td>{_dcell(_diff(mine, oth))}</tr>'))
+    if not rws: return '<p class="note">Δεν υπάρχουν ακόμα φάσεις.</p>'
+    col = "Δίκιο στην ομάδα" if mode == "prot" else "Σωστός ο διαιτητής"
+    first = "Όταν διαμαρτύρεται" if mode == "prot" else "Όταν διαμαρτύρεται ο αντίπαλός της"
+    return (f'<div class="tablewrap"><table class="t lean"><tr><th class="l">{first}</th><th>Φάσεις</th><th>{col}</th><th>Οι άλλοι τηλεκριτικοί</th><th>Διαφορά</th></tr>'
+            + "".join(r for _, r in sorted(rws, key=lambda x: x[0] < 1000)) + '</table></div>')
+def lean_map(here):
+    teams = [t for t in lean_teams() if any(lean(c["name"], t, "all")[0] >= MIN_N for c in CRITICS)]
+    if not teams: return ""
+    hh = '<tr><th class="l">Σχολιαστής</th>' + "".join(f'<th title="{esc(t)}">{esc(short(t))}</th>' for t in teams) + '</tr>'
+    tr = ""
+    for c in CRITICS:
+        cells = ""
+        for t in teams:
+            n, mine, oth = lean(c["name"], t, "all")
+            d = _diff(mine, oth) if n >= MIN_N else None
+            if d is None:
+                cells += f'<td class="hm nil" title="{esc(t)}: {n} φάσεις">·</td>'
+            else:
+                a = min(abs(d), 40) / 40 * 55 + 8
+                col = "var(--card)" if d > 0 else "#3B6FB6"
+                cells += (f'<td class="hm" style="background:color-mix(in srgb,{col} {a:.0f}%,transparent)" '
+                          f'title="{esc(t)}: {n} φάσεις · {_pct(mine)} υπέρ, οι άλλοι {_pct(oth)}">{"+" if d > 0 else "−" if d < 0 else ""}{abs(d)}</td>')
+        tr += f'<tr><td class="l"><a href="{rel(here, "tilekritiki/" + c["slug"] + "/")}">{esc(c["name"])}</a></td>{cells}</tr>'
+    return (f'<h2>Με ποιον πάει κάθε σχολιαστής</h2><p class="lead">Σε όλες τις φάσεις μιας ομάδας, πόσο πιο συχνά από τους άλλους τηλεκριτικούς ο σχολιαστής κρίνει υπέρ της, '
+            f'είτε δίνοντάς της δίκιο όταν διαμαρτύρεται είτε βγάζοντας σωστό τον διαιτητή όταν διαμαρτύρεται ο αντίπαλος. Σε ποσοστιαίες μονάδες, στις ίδιες ακριβώς φάσεις.</p>'
+            f'<div class="tablewrap"><table class="t hmap">{hh}{tr}</table></div>'
+            f'<p class="note">Θετικό (κίτρινο): κρίνει υπέρ της ομάδας συχνότερα από τους άλλους. Αρνητικό (μπλε): σπανιότερα. · σημαίνει λιγότερες από {MIN_N} φάσεις. Πέρασε τον δείκτη πάνω από ένα κελί για τα νούμερα.</p>')
 def critic_page(c):
     path = f'tilekritiki/{c["slug"]}/'
     mine = [p for p in PH if c["name"] in p["ops"]]
@@ -685,6 +774,13 @@ def critic_page(c):
 <h1>{esc(c["name"])}: τι λέει για τη διαιτησία</h1>
 <p class="lead">{esc(c["kind"])}{" · " + esc(c["outlet"]) if c["outlet"] else ""}. Οι τοποθετήσεις του για τις αμφισβητούμενες φάσεις της Super League, με πηγή για καθεμία.</p>
 {k}
+<h2>Με ποιον πάει</h2>
+<p class="lead">Πόσο συχνά ο {esc(c["name"])} κρίνει υπέρ κάθε ομάδας, σε σύγκριση με τους άλλους τηλεκριτικούς στις ίδιες ακριβώς φάσεις. Μετράνε μόνο οι φάσεις όπου είπε σωστή ή λάθος απόφαση.</p>
+<h3>Όταν διαμαρτύρεται η ομάδα</h3>
+{lean_table(c["name"], "prot")}
+<h3>Όταν διαμαρτύρεται ο αντίπαλός της</h3>
+{lean_table(c["name"], "opp")}
+<p class="note">Διαφορά: ποσοστιαίες μονάδες πάνω ή κάτω από τους άλλους τηλεκριτικούς. Με λιγότερες από {MIN_N} φάσεις δεν δείχνουμε ποσοστό.</p>
 <h2>Φάσεις</h2>
 {phase_details(path, list(reversed(mine)))}"""
     page(path, f'{c["name"]}: ανάλυση διαιτησίας Super League · refstats.gr',
@@ -706,6 +802,7 @@ def tilekritiki_index():
     body = f"""<h1>Τηλεκριτική: τι λένε οι ειδικοί για τις φάσεις</h1>
 <p class="lead">{len(cur)} αμφισβητούμενες φάσεις, από τις οποίες {wrong} κρίθηκαν λάθος από την πλειοψηφία των τηλεκριτικών. Για κάθε φάση: η απόφαση του διαιτητή και η γνώμη κάθε τηλεκριτικού και δημοσιογράφου.</p>
 <div class="tablewrap"><table class="t"><tr><th class="l">Σχολιαστής</th><th class="l">Ιδιότητα</th><th>Φάσεις</th><th>«Σωστή απόφαση»</th></tr>{tr}</table></div>
+{lean_map(path)}
 {secs}"""
     page(path, f"Τηλεκριτική Super League {CUR}: Βαρούχας, Κουτσιαύτης και άλλοι για τις φάσεις · refstats.gr",
          f"Οι αμφισβητούμενες φάσεις κάθε αγωνιστικής της Super League και τι είπαν οι τηλεκριτικοί διαιτησίας: σωστή ή λάθος απόφαση και γιατί.", body, "0.8")
@@ -729,6 +826,8 @@ def static_pages():
 <h2>Τηλεκριτική</h2>
 <p>Για τις αμφισβητούμενες φάσεις κάθε αγωνιστικής καταγράφουμε τι είπαν δημόσια οι τηλεκριτικοί διαιτησίας και δημοσιογράφοι που σχολιάζουν τη διαιτησία. Κάθε τοποθέτηση έχει πηγή και αποδίδεται με δικά μας λόγια σε μία πρόταση. «Σωστή» σημαίνει ότι ο σχολιαστής συμφώνησε με την τελική απόφαση, «Λάθος» ότι διαφώνησε και «Οριακή» ότι τη θεώρησε αμφίβολη ή δεν πήρε ξεκάθαρη θέση.</p>
 <p>Το συμπέρασμα κάθε φάσης είναι η απλή πλειοψηφία μόνο των τηλεκριτικών· οι δημοσιογράφοι εμφανίζονται χωριστά και δεν μετρούν σε αυτό. Αν ένας σχολιαστής θεωρεί ότι η θέση του αποδόθηκε λάθος, τη διορθώνουμε.</p>
+<p>Ομάδα που διαμαρτυρήθηκε είναι η αντίπαλη αυτής που ωφελήθηκε από την απόφαση. Όταν ένας σχολιαστής κρίνει την απόφαση σωστή, πηγαίνει με τον διαιτητή· όταν την κρίνει λάθος, δίνει δίκιο στην ομάδα που διαμαρτυρήθηκε.</p>
+<p>Στο «Με ποιον πάει» συγκρίνουμε κάθε σχολιαστή με τους υπόλοιπους τηλεκριτικούς στις ίδιες ακριβώς φάσεις, ώστε να μη μετράει το αν μια ομάδα αδικήθηκε πράγματι πολλές φορές. Οι οριακές τοποθετήσεις δεν μετρούν, και ποσοστό δείχνουμε μόνο από {MIN_N} φάσεις και πάνω. Τα νούμερα περιγράφουν τοποθετήσεις, δεν χαρακτηρίζουν πρόσωπα.</p>
 <h2>Πηγές</h2>
 <p>Ορισμοί της ΚΕΔ, επίσημα φύλλα αγώνα και βίντεο των φάσεων. Κάθε αγώνας και κάθε φάση VAR στη βάση έχει πηγή. Αν βρεις λάθος, στείλε μας την πηγή και θα το διορθώσουμε.</p>
 </div>""", "0.4")
