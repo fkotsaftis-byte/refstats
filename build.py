@@ -702,7 +702,7 @@ def phase_details(here, phases):
             sym, k = VSYM[o["v"]]
             src = f' · <a href="{esc(o["src"])}" rel="nofollow noopener" target="_blank">πηγή</a>' if o["src"].startswith("http") else ""
             items.append(f'<li><span class="vs {k}">{sym} {o["v"]}</span> <a href="{rel(here, "tilekritiki/" + c["slug"] + "/")}"><b>{esc(c["name"])}</b></a>'
-                         f'{" (" + esc(c["kind"].lower()) + ")" if c["kind"] == "Δημοσιογράφος" else ""}: {esc(o["why"])}'
+                         f'{" (" + esc(c["kind"].lower()) + ")" if c["kind"] == "Δημοσιογράφος" else ""}{": " + esc(o["why"]) if o["why"] else ""}'
                          f'{" Έπρεπε: " + esc(o["should"]) + "." if o["should"] and o["v"] != "Σωστή" else ""}{src}</li>')
         vid = f' · <a href="{esc(p["video"])}" rel="nofollow noopener" target="_blank">βίντεο</a>' if p["video"].startswith("http") else ""
         out.append(f'<div class="phx" id="{ph_anchor(p)}"><h3>{esc(m["home"])}–{esc(m["away"])} {esc(p["min"])}\': {esc(p["cat"])}</h3>'
@@ -880,4 +880,4 @@ open(os.path.join(OUT, "sitemap.xml"), "w", encoding="utf-8").write(
 if CFG.get("custom_domain"):
     open(os.path.join(OUT, "CNAME"), "w").write(CFG["custom_domain"] + "\n")
 open(os.path.join(OUT, ".nojekyll"), "w").write("")
-print(f"OK: {len(MATCHES)} αγώνες, {sum(len(m['var_items']) for m in MATCHES)} φάσεις VAR, {len(PH)} αμφισβητούμενες φάσεις, {len(PAGES)} σελίδες -> {OUT}")
+print(f"OK: {len(MATCHES)} αγώνες, {sum(len(m['var_items']) for m in MATCHES)} φάσεις VAR, {len(PH)} αμφισβητούμενες φάσεις, {len(PA
