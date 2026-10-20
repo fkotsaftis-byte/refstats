@@ -160,9 +160,9 @@ for i, r in enumerate(rows_opt("gnomes"), start=2):
     p, c, v = PHBY.get(r.get("Κωδικός φάσης", "")), r.get("Σχολιαστής", ""), r.get("Ετυμηγορία", "")
     if not any(r.values()): continue
     if not p: WARN.append(f"Γνώμες γρ.{i}: ο κωδικός «{r.get('Κωδικός φάσης', '')}» δεν υπάρχει στις Φάσεις"); continue
-    if v not in ("Σωστή", "Λάθος", "Οριακή"): WARN.append(f"Γνώμες γρ.{i}: άγνωστη Ετυμηγορία «{v}»"); continue
+    if v not in ("Σωστή", "Λάθος", "Εν μέρει", "Οριακή"): WARN.append(f"Γνώμες γρ.{i}: άγνωστη Ετυμηγορία «{v}»"); continue
     if not c: WARN.append(f"Γνώμες γρ.{i}: λείπει ο Σχολιαστής"); continue
-    if p and c and v in ("Σωστή", "Λάθος", "Οριακή"):
+    if p and c and v in ("Σωστή", "Λάθος", "Εν μέρει", "Οριακή"):
         CRIT.setdefault(c, {"name": c, "slug": slugify(c), "kind": "Τηλεκριτικός", "outlet": "", "order": 999})
         p["ops"][c] = {"v": v, "should": r.get("Τι έπρεπε να δοθεί", ""), "why": r.get("Αιτιολογία", ""), "src": r.get("Πηγή", "")}
 WARN += [f"Φάσεις: η φάση «{p['code']}» δεν έχει καμία γνώμη, δεν εμφανίζεται" for p in PH if not p["ops"]]
@@ -181,9 +181,21 @@ TK = bool(PH or ANN)
 def consensus(p, journalists=False):
     grp = lambda c: (CRIT[c]["kind"] == "Δημοσιογράφος") == journalists
     ok = sum(1 for c, o in p["ops"].items() if grp(c) and o["v"] == "Σωστή")
-    bad = sum(1 for c, o in p["ops"].items() if grp(c) and o["v"] == "Λάθος")
+    full = sum(1 for c, o in p["ops"].items() if grp(c) and o["v"] == "Λάθος")
+    part = sum(1 for c, o in p["ops"].items() if grp(c) and o["v"] == "Εν μέρει")
+    bad = full + part  # the referee got it wrong, fully or partly
     if not ok and not bad: return None, ok, bad
-    return ("Λάθος" if bad > ok else "Σωστή" if ok > bad else "Ισοψηφία"), ok, bad
+    if ok > bad: return "Σωστή", ok, bad
+    if ok == bad: return "Ισοψηφία", ok, bad
+    return ("Λάθος" if full > part else "Εν μέρει"), ok, bad
+def parts(p, journalists=False):
+    return sum(1 for c, o in p["ops"].items() if (CRIT[c]["kind"] == "Δημοσιογράφος") == journalists and o["v"] == "Εν μέρει")
+WEIGHT = {"Λάθος": 1, "Εν μέρει": 0.5}  # a partly wrong decision counts half in every balance
+WRONG = ("Λάθος", "Εν μέρει")
+DECISIVE = ("Σωστή", "Λάθος", "Εν μέρει")
+def nf(x):
+    x = round(x, 1)
+    return str(int(x)) if x == int(x) else f"{x:.1f}".replace(".", ",")
 
 # ---- who did each critic side with: the referee or the team that protested
 SHORT = {"Ολυμπιακός": "ΟΛΥ", "Παναθηναϊκός": "ΠΑΟ", "ΑΕΚ": "ΑΕΚ", "ΠΑΟΚ": "ΠΑΟΚ", "Άρης": "ΑΡΗΣ", "ΟΦΗ": "ΟΦΗ",
@@ -201,7 +213,8 @@ def is_tele(name): return CRIT[name]["kind"] != "Δημοσιογράφος"
 def _pro(p, team, v):
     """True if verdict v favours `team`: it protested and the critic said Λάθος,
     or the opponent protested and the critic said Σωστή."""
-    return (v == "Λάθος") if protester(p) == team else (v == "Σωστή")
+    if v == "Εν μέρει": return 0.5
+    return float((v == "Λάθος") == (protester(p) == team))
 def lean(cname, team, mode):
     """mode 'prot': phases where `team` protested · 'opp': where its opponent protested · 'all': both.
     Returns (n, rate of the critic in favour of team, rate of the other τηλεκριτικοί on the same phases)."""
@@ -212,12 +225,12 @@ def lean(cname, team, mode):
         if mode == "prot" and pr != team: continue
         if mode == "opp" and pr == team: continue
         o = p["ops"].get(cname)
-        if o and o["v"] in ("Σωστή", "Λάθος"): sel.append((p, o["v"]))
+        if o and o["v"] in DECISIVE: sel.append((p, o["v"]))
     n = len(sel)
     if not n: return 0, None, None
     if len({p["m"]["id"] for p, _ in sel}) < MIN_M: n = min(n, MIN_N - 1)  # too few matches: treat as not enough data
     mine = sum(1 for p, v in sel if _pro(p, team, v)) / n
-    oth = [(p, o["v"]) for p, _ in sel for c, o in p["ops"].items() if c != cname and is_tele(c) and o["v"] in ("Σωστή", "Λάθος")]
+    oth = [(p, o["v"]) for p, _ in sel for c, o in p["ops"].items() if c != cname and is_tele(c) and o["v"] in DECISIVE]
     others = sum(1 for p, v in oth if _pro(p, team, v)) / len(oth) if oth else None
     return n, mine, others
 def lean_teams():
@@ -512,8 +525,8 @@ def team_ph(path, team):
     ph = [p for p in PH if team in (p["m"]["home"], p["m"]["away"])]
     if not ph: return ""
     plus, minus = team_errors(team, ph)
-    return (f'<h2>Αμφισβητούμενες φάσεις</h2><p class="lead">Κατά την πλειοψηφία των τηλεκριτικών, η ομάδα <b class="pos">ωφελήθηκε</b> από {plus} '
-            f'και <b class="neg">αδικήθηκε</b> από {minus} λάθος αποφάσεις.</p>{phase_cards(path, ph)}')
+    return (f'<h2>Αμφισβητούμενες φάσεις</h2><p class="lead">Κατά την πλειοψηφία των τηλεκριτικών, η ομάδα <b class="pos">ωφελήθηκε</b> από {nf(plus)} '
+            f'και <b class="neg">αδικήθηκε</b> από {nf(minus)} λάθος αποφάσεις.</p>{phase_cards(path, ph)}')
 
 def ref_stats(lst):
     n = len(lst)
@@ -547,7 +560,7 @@ def refs_index():
 def ref_ph(path, ref):
     ph = [x for x in PH if x["m"]["ref"] == ref]
     if not ph: return ""
-    w = sum(1 for x in ph if consensus(x)[0] == "Λάθος")
+    w = sum(1 for x in ph if consensus(x)[0] in WRONG)
     return (f'<h2>Αμφισβητούμενες φάσεις</h2><p class="lead">{len(ph)} φάσεις στους αγώνες του σχολιάστηκαν· η πλειοψηφία των τηλεκριτικών έκρινε λάθος τις {w}.</p>'
             f'{phase_cards(path, ph)}')
 
@@ -674,7 +687,7 @@ def rounds_index():
          "Η τελευταία αγωνιστική της Super League και όλες οι προηγούμενες, με τους διαιτητές, τα πέναλτι, τις κόκκινες και τις επεμβάσεις VAR κάθε αγώνα.",
          "<h1>Αγωνιστικές</h1>" + latest + '<h2 style="margin-top:34px">Όλες οι αγωνιστικές</h2>' + "".join(parts).replace("<h2>", "<h3>").replace("</h2>", "</h3>"), "0.7")
 
-VSYM = {"Σωστή": ("✓", "ok"), "Λάθος": ("✗", "bad"), "Οριακή": ("≈", "mid")}
+VSYM = {"Σωστή": ("✓", "ok"), "Λάθος": ("✗", "bad"), "Εν μέρει": ("½", "part"), "Οριακή": ("≈", "mid")}
 def ph_anchor(p): return "f-" + slugify(p["code"])
 def ph_where(here, p):
     m = p["m"]; rp = round_path(m)
@@ -689,6 +702,7 @@ def side_of(p, o):
     pr = protester(p)
     if o["v"] == "Οριακή": return "≈ οριακή", "mid"
     if o["v"] == "Σωστή": return "Διαιτητής", "ref"
+    if o["v"] == "Εν μέρει": return ((short(pr) + " εν μέρει") if pr else "Εν μέρει"), "tmp"
     return (short(pr), "tm") if pr else ("Λάθος", "tm")
 def phase_card(here, p):
     pr = protester(p)
@@ -699,12 +713,14 @@ def phase_card(here, p):
     chips = "".join(f'<a class="cc {side_of(p, o)[1]}{"" if is_tele(n) else " j"}" href="{rel(here, "tilekritiki/" + CRIT[n]["slug"] + "/")}"><span>{esc(n)}</span><b>{esc(side_of(p, o)[0])}</b></a>'
                     for n, o in sorted(tele, key=lambda x: order.get(x[0], 99)) + sorted(jour, key=lambda x: order.get(x[0], 99)))
     if c:
-        tot = ok + bad
-        k = {"Σωστή": "ok", "Λάθος": "bad"}.get(c, "mid")
-        word = {"Σωστή": "Σωστή απόφαση", "Λάθος": "Λάθος απόφαση", "Ισοψηφία": "Ισοψηφία"}[c]
-        bar = (f'<div class="pc-v"><div class="vb" role="img" aria-label="{bad} με {esc(pr or "την ομάδα")}, {ok} με τον διαιτητή">'
-               f'<i class="t" style="width:{100 * bad / tot:.0f}%"></i><i class="r" style="width:{100 * ok / tot:.0f}%"></i></div>'
-               f'<span><b>{bad}</b> με {esc(short(pr) if pr else "την ομάδα")} · <b>{ok}</b> με τον διαιτητή</span><em class="{k}">{word}</em></div>')
+        part = parts(p); full = bad - part; tot = ok + bad
+        k = {"Σωστή": "ok", "Λάθος": "bad", "Εν μέρει": "part"}.get(c, "mid")
+        word = {"Σωστή": "Σωστή απόφαση", "Λάθος": "Λάθος απόφαση", "Εν μέρει": "Εν μέρει λάθος", "Ισοψηφία": "Ισοψηφία"}[c]
+        tn = esc(short(pr) if pr else "την ομάδα")
+        txt = f'<b>{full}</b> με {tn}' + (f' · <b>{part}</b> εν μέρει' if part else "") + f' · <b>{ok}</b> με τον διαιτητή'
+        bar = (f'<div class="pc-v"><div class="vb" role="img" aria-label="{full} με {esc(pr or "την ομάδα")}, {part} εν μέρει, {ok} με τον διαιτητή">'
+               f'<i class="t" style="width:{100 * full / tot:.0f}%"></i><i class="p" style="width:{100 * part / tot:.0f}%"></i><i class="r" style="width:{100 * ok / tot:.0f}%"></i></div>'
+               f'<span>{txt}</span><em class="{k}">{word}</em></div>')
     else:
         bar = '<div class="pc-v"><span>Δεν έχουν τοποθετηθεί τηλεκριτικοί</span></div>'
     items = []
@@ -743,7 +759,7 @@ def phase_cards(here, phases, newest_first=True, head="h3", howto=True):
         out.append(f'<section class="pm"><{head}>{title}</{head}><p class="note">{sub}</p>{anl}<div class="pcs">{"".join(phase_card(here, p) for p in ps)}</div></section>')
     return "".join(out) + (HOWTO if howto else "")
 HOWTO = ('<details class="howto"><summary>Πώς διαβάζεται</summary><p>Σε κάθε φάση φαίνεται ποια ομάδα διαμαρτυρήθηκε και τι αποφάσισε ο διαιτητής. '
-         'Κάθε σχολιαστής πηγαίνει είτε με τον <b>διαιτητή</b> (έκρινε την απόφαση σωστή) είτε με την <b>ομάδα</b> που διαμαρτυρήθηκε (την έκρινε λάθος). '
+         'Κάθε σχολιαστής πηγαίνει είτε με τον <b>διαιτητή</b> (έκρινε την απόφαση σωστή) είτε με την <b>ομάδα</b> που διαμαρτυρήθηκε (την έκρινε λάθος) ή «εν μέρει» με την ομάδα, όταν ο διαιτητής έκανε λάθος αλλά μικρότερο από όσο καταγγέλλει η ομάδα. '
          'Η μπάρα και το συμπέρασμα μετρούν μόνο τους τηλεκριτικούς. Οι δημοσιογράφοι φαίνονται με πιο αχνό χρώμα και δεν μετρούν.</p></details>')
 def phase_table(here, phases):
     cols = [c for c in CRITICS if any(c["name"] in p["ops"] for p in phases)]
@@ -792,9 +808,9 @@ def team_errors(team, phases):
     plus = minus = 0
     for p in phases:
         c, _, _ = consensus(p)
-        if c == "Λάθος" and p["ben"]:
-            if p["ben"] == team: plus += 1
-            elif team in (p["m"]["home"], p["m"]["away"]): minus += 1
+        if c in WRONG and p["ben"]:
+            if p["ben"] == team: plus += WEIGHT[c]
+            elif team in (p["m"]["home"], p["m"]["away"]): minus += WEIGHT[c]
     return plus, minus
 def _pct(x): return f"{round(100 * x)}%"
 def _diff(a, b):
@@ -846,10 +862,10 @@ def critic_page(c):
     path = f'tilekritiki/{c["slug"]}/'
     mine = [p for p in PH if c["name"] in p["ops"]]
     n = len(mine); cnt = {k: sum(1 for p in mine if p["ops"][c["name"]]["v"] == k) for k in VSYM}
-    agree = [p for p in mine if consensus(p)[0] in ("Σωστή", "Λάθος") and p["ops"][c["name"]]["v"] in ("Σωστή", "Λάθος")]
+    agree = [p for p in mine if consensus(p)[0] in DECISIVE and p["ops"][c["name"]]["v"] in DECISIVE]
     ag = sum(1 for p in agree if p["ops"][c["name"]]["v"] == consensus(p)[0])
     pc = lambda x: f"{round(100 * x / n)}%" if n else "—"
-    k = kpis([("Φάσεις", n, ""), ("Σωστή απόφαση", pc(cnt["Σωστή"]), ""), ("Λάθος απόφαση", pc(cnt["Λάθος"]), ""), ("Οριακή", pc(cnt["Οριακή"]), ""),
+    k = kpis([("Φάσεις", n, ""), ("Σωστή απόφαση", pc(cnt["Σωστή"]), ""), ("Λάθος απόφαση", pc(cnt["Λάθος"]), ""), ("Εν μέρει λάθος", pc(cnt["Εν μέρει"]), ""), ("Οριακή", pc(cnt["Οριακή"]), ""),
               ("Συμφωνία με πλειοψηφία", f"{round(100 * ag / len(agree))}%" if agree else "—", "")])
     body = f"""<p class="crumb"><a href="{rel(path, "tilekritiki/")}">Τηλεκριτική</a> / {esc(c["name"])}</p>
 <h1>{esc(c["name"])}: τι λέει για τη διαιτησία</h1>
@@ -910,9 +926,9 @@ def balance_rows(phases, journalists):
         for t in (p["m"]["home"], p["m"]["away"]):
             r = T.setdefault(t, {"n": 0, "plus": 0, "minus": 0})
             r["n"] += 1
-            if c == "Λάθος":
-                if t == p["ben"]: r["plus"] += 1
-                elif t == pr: r["minus"] += 1
+            if c in WRONG:
+                if t == p["ben"]: r["plus"] += WEIGHT[c]
+                elif t == pr: r["minus"] += WEIGHT[c]
     return T
 def balance_table(here, phases, journalists):
     T = balance_rows(phases, journalists)
@@ -922,8 +938,8 @@ def balance_table(here, phases, journalists):
     for t, r in rows:
         b = r["plus"] - r["minus"]
         k = "pos" if b > 0 else "neg" if b < 0 else "nil"
-        tr += (f'<tr><td class="l">{team_link(here, t)}</td><td data-v="{r["n"]}">{r["n"]}</td><td data-v="{r["plus"]}">{r["plus"]}</td>'
-               f'<td data-v="{r["minus"]}">{r["minus"]}</td><td data-v="{b}" class="bal {k}"><b>{"+" if b > 0 else "−" if b < 0 else ""}{abs(b)}</b></td></tr>')
+        tr += (f'<tr><td class="l">{team_link(here, t)}</td><td data-v="{r["n"]}">{r["n"]}</td><td data-v="{r["plus"]}">{nf(r["plus"])}</td>'
+               f'<td data-v="{r["minus"]}">{nf(r["minus"])}</td><td data-v="{b}" class="bal {k}"><b>{"+" if b > 0 else "−" if b < 0 else ""}{nf(abs(b))}</b></td></tr>')
     return ('<div class="tablewrap"><table class="t sortable bal-t"><thead><tr><th class="l">Ομάδα</th><th>Φάσεις</th><th><span class="lg">Ευνοήθηκε</span><span class="sm">Υπέρ</span></th><th><span class="lg">Αδικήθηκε</span><span class="sm">Κατά</span></th><th><span class="lg">Ισοζύγιο</span><span class="sm">±</span></th></tr></thead>'
             f'<tbody>{tr}</tbody></table></div>')
 def balance_page():
@@ -936,7 +952,7 @@ def balance_page():
 {balance_table(path, cur, False)}
 <h2>Κατά τους δημοσιογράφους</h2>
 {balance_table(path, cur, True)}
-<p class="note">Ευνοήθηκε: η ομάδα ωφελήθηκε από απόφαση που η πλειοψηφία έκρινε λάθος. Αδικήθηκε: η ομάδα διαμαρτυρήθηκε και η πλειοψηφία τής έδωσε δίκιο. Φάσεις: όσες αμφισβητούμενες φάσεις της ομάδας έκρινε η κάθε ομάδα σχολιαστών, μαζί με τις σωστές αποφάσεις και τις ισοψηφίες, που δεν αλλάζουν το ισοζύγιο. Μετράνε μόνο οι αμφισβητούμενες φάσεις που καταγράφουμε, όχι όλες οι αποφάσεις των αγώνων. <a href="{rel(path, "methodologia/")}#tilekritiki">Πώς επιλέγουμε</a></p>"""
+<p class="note">Ευνοήθηκε: η ομάδα ωφελήθηκε από απόφαση που η πλειοψηφία έκρινε λάθος. Αδικήθηκε: η ομάδα διαμαρτυρήθηκε και η πλειοψηφία τής έδωσε δίκιο. Φάσεις: όσες αμφισβητούμενες φάσεις της ομάδας έκρινε η κάθε ομάδα σχολιαστών, μαζί με τις σωστές αποφάσεις και τις ισοψηφίες, που δεν αλλάζουν το ισοζύγιο. Μια απόφαση «εν μέρει λάθος» (ο διαιτητής έκανε λάθος, αλλά μικρότερο από όσο καταγγέλλει η ομάδα) μετράει μισή. Μετράνε μόνο οι αμφισβητούμενες φάσεις που καταγράφουμε, όχι όλες οι αποφάσεις των αγώνων. <a href="{rel(path, "methodologia/")}#tilekritiki">Πώς επιλέγουμε</a></p>"""
     page(path, f"Ισοζύγιο διαιτησίας Super League {CUR}: ποιος ευνοήθηκε κατά τους τηλεκριτικούς · refstats.gr",
          f"Ποιες ομάδες της Super League ευνοήθηκαν ή αδικήθηκαν από λάθος αποφάσεις διαιτητών στη σεζόν {CUR}, κατά την πλειοψηφία των τηλεκριτικών και των δημοσιογράφων.", body, "0.8")
 def tk_tabs(here, cur):
@@ -946,13 +962,13 @@ def critic_stats(c):
     mine = [p for p in PH if c["name"] in p["ops"]]
     n = len(mine)
     ref = sum(1 for p in mine if p["ops"][c["name"]]["v"] == "Σωστή")
-    agree = [p for p in mine if consensus(p)[0] in ("Σωστή", "Λάθος") and p["ops"][c["name"]]["v"] in ("Σωστή", "Λάθος")]
+    agree = [p for p in mine if consensus(p)[0] in DECISIVE and p["ops"][c["name"]]["v"] in DECISIVE]
     ag = sum(1 for p in agree if p["ops"][c["name"]]["v"] == consensus(p)[0])
     return n, (f"{round(100 * ref / n)}%" if n else "—"), (f"{round(100 * ag / len(agree))}%" if agree else "—")
 def tilekritiki_index():
     path = "tilekritiki/"
     cur = [p for p in PH if p["m"]["season"] == CUR] or PH
-    wrong = sum(1 for p in cur if consensus(p)[0] == "Λάθος")
+    wrong = sum(1 for p in cur if consensus(p)[0] in WRONG)
     groups = {}
     for p in cur:
         groups.setdefault((PHASE_ORDER.get(p["m"]["phase"], 9), p["m"]["round"], p["m"]["phase"]), []).append(p)
@@ -1010,7 +1026,7 @@ def static_pages():
 <li>η απόφαση έκρινε ή επηρέασε σημαντικά το αποτέλεσμα και συζητήθηκε ευρέως·</li>
 <li>μια ομάδα διαμαρτυρήθηκε επίσημα για αυτήν.</li></ul>
 <p>Ξεκάθαρες αποφάσεις δεν μπαίνουν, ακόμα κι αν σχολιάστηκαν: ένα πέναλτι που ζητήθηκε ενώ η μπάλα βρήκε στο στήθος, ένα πέναλτι που δόθηκε για καθαρή ανατροπή, ένα γκολ που ακυρώθηκε από το VAR για εμφανές οφσάιντ. Γι' αυτό τα ποσοστά «Με τον διαιτητή» αφορούν μόνο δύσκολες φάσεις και δεν δείχνουν πόσο καλά σφύριξε συνολικά ένας διαιτητής.</p>
-<p>Για τις αμφισβητούμενες φάσεις κάθε αγωνιστικής καταγράφουμε τι είπαν δημόσια οι τηλεκριτικοί διαιτησίας και δημοσιογράφοι που σχολιάζουν τη διαιτησία. Κάθε τοποθέτηση έχει πηγή και αποδίδεται με δικά μας λόγια σε μία πρόταση. «Σωστή» σημαίνει ότι ο σχολιαστής συμφώνησε με την τελική απόφαση, «Λάθος» ότι διαφώνησε και «Οριακή» ότι τη θεώρησε αμφίβολη ή δεν πήρε ξεκάθαρη θέση.</p>
+<p>Για τις αμφισβητούμενες φάσεις κάθε αγωνιστικής καταγράφουμε τι είπαν δημόσια οι τηλεκριτικοί διαιτησίας και δημοσιογράφοι που σχολιάζουν τη διαιτησία. Κάθε τοποθέτηση έχει πηγή και αποδίδεται με δικά μας λόγια σε μία πρόταση. «Σωστή» σημαίνει ότι ο σχολιαστής συμφώνησε με την τελική απόφαση, «Λάθος» ότι διαφώνησε, «Εν μέρει» ότι ο διαιτητής έκανε λάθος αλλά μικρότερο από όσο καταγγέλλει η ομάδα (π.χ. η ομάδα ζητούσε κόκκινη, έπρεπε φάουλ και κίτρινη, δεν δόθηκε τίποτα) και «Οριακή» ότι τη θεώρησε αμφίβολη ή δεν πήρε ξεκάθαρη θέση. Στα ισοζύγια μια απόφαση «εν μέρει λάθος» μετράει μισή.</p>
 <p>Το συμπέρασμα κάθε φάσης είναι η απλή πλειοψηφία μόνο των τηλεκριτικών· οι δημοσιογράφοι εμφανίζονται χωριστά και δεν μετρούν σε αυτό. Αν ένας σχολιαστής θεωρεί ότι η θέση του αποδόθηκε λάθος, τη διορθώνουμε.</p>
 <p>Ομάδα που διαμαρτυρήθηκε είναι η αντίπαλη αυτής που ωφελήθηκε από την απόφαση. Όταν ένας σχολιαστής κρίνει την απόφαση σωστή, πηγαίνει με τον διαιτητή· όταν την κρίνει λάθος, δίνει δίκιο στην ομάδα που διαμαρτυρήθηκε.</p>
 <p>Στο «Με ποιον πάει» συγκρίνουμε κάθε σχολιαστή με τους υπόλοιπους τηλεκριτικούς στις ίδιες ακριβώς φάσεις, ώστε να μη μετράει το αν μια ομάδα αδικήθηκε πράγματι πολλές φορές. Οι οριακές τοποθετήσεις δεν μετρούν, και ποσοστό δείχνουμε μόνο από {MIN_N} φάσεις σε τουλάχιστον {MIN_M} διαφορετικούς αγώνες. Τα νούμερα περιγράφουν τοποθετήσεις, δεν χαρακτηρίζουν πρόσωπα.</p>
