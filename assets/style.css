@@ -225,3 +225,8 @@ table.crit.j td{color:var(--muted)}
 .an-flag{font-size:13px;margin:-4px 0 10px;padding:6px 10px;border-radius:6px;background:color-mix(in srgb,var(--card) 18%,transparent);display:inline-block}
 .subtabs{overflow-x:auto;scrollbar-width:none}.subtabs a{white-space:nowrap}
 @media (max-width:480px){.subtabs a{font-size:15px;padding:6px 9px}}
+table.bal-t td.bal{font-family:var(--display);font-size:17px}
+table.bal-t td.bal.pos{color:var(--pos)}table.bal-t td.bal.neg{color:var(--neg)}table.bal-t td.bal.nil{color:var(--muted)}
+table.sortable th{cursor:pointer}
+table.bal-t .sm{display:none}
+@media (max-width:480px){table.bal-t .lg{display:none}table.bal-t .sm{display:inline}table.bal-t td,table.bal-t th{padding-left:8px;padding-right:8px}table.bal-t{width:100%}}
