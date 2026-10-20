@@ -145,19 +145,28 @@ for i, r in enumerate(rows_opt("sxoliastes")):
         CRIT[n] = {"name": n, "slug": r.get("Slug (URL)") or slugify(n), "kind": r.get("Ιδιότητα") or "Τηλεκριτικός",
                    "outlet": r.get("Μέσο", ""), "order": i}
 PH, PHBY = [], {}
-for r in rows_opt("faseis"):
+WARN = []
+for i, r in enumerate(rows_opt("faseis"), start=2):
     code, m = r.get("Κωδικός φάσης", ""), ALLM.get(r.get("ID αγώνα", ""))
-    if not (code and m) or code in PHBY:
-        continue
+    if not any(r.values()): continue
+    if not code: WARN.append(f"Φάσεις γρ.{i}: λείπει ο Κωδικός φάσης"); continue
+    if not m: WARN.append(f"Φάσεις γρ.{i}: το ID αγώνα «{r.get('ID αγώνα', '')}» δεν υπάρχει στους Αγώνες"); continue
+    if code in PHBY: WARN.append(f"Φάσεις γρ.{i}: ο κωδικός «{code}» υπάρχει ήδη, αγνοήθηκε"); continue
     p = {"code": code, "m": m, "min": r.get("Λεπτό", ""), "cat": r.get("Κατηγορία", ""), "dec": r.get("Απόφαση διαιτητή", ""),
          "ben": r.get("Ωφελημένη ομάδα", ""), "var": r.get("Επέμβαση VAR", "") == "Ναι", "desc": r.get("Περιγραφή", ""),
          "video": r.get("Βίντεο", ""), "ops": {}}
     PH.append(p); PHBY[code] = p
-for r in rows_opt("gnomes"):
+for i, r in enumerate(rows_opt("gnomes"), start=2):
     p, c, v = PHBY.get(r.get("Κωδικός φάσης", "")), r.get("Σχολιαστής", ""), r.get("Ετυμηγορία", "")
+    if not any(r.values()): continue
+    if not p: WARN.append(f"Γνώμες γρ.{i}: ο κωδικός «{r.get('Κωδικός φάσης', '')}» δεν υπάρχει στις Φάσεις"); continue
+    if v not in ("Σωστή", "Λάθος", "Οριακή"): WARN.append(f"Γνώμες γρ.{i}: άγνωστη Ετυμηγορία «{v}»"); continue
+    if not c: WARN.append(f"Γνώμες γρ.{i}: λείπει ο Σχολιαστής"); continue
     if p and c and v in ("Σωστή", "Λάθος", "Οριακή"):
         CRIT.setdefault(c, {"name": c, "slug": slugify(c), "kind": "Τηλεκριτικός", "outlet": "", "order": 999})
         p["ops"][c] = {"v": v, "should": r.get("Τι έπρεπε να δοθεί", ""), "why": r.get("Αιτιολογία", ""), "src": r.get("Πηγή", "")}
+WARN += [f"Φάσεις: η φάση «{p['code']}» δεν έχει καμία γνώμη, δεν εμφανίζεται" for p in PH if not p["ops"]]
+WARN += [f"Φάσεις: η φάση «{p['code']}» δεν έχει Ωφελημένη ομάδα του αγώνα" for p in PH if p["ops"] and p["ben"] not in (p["m"]["home"], p["m"]["away"])]
 PH = [p for p in PH if p["ops"]]
 PH.sort(key=lambda p: (p["m"]["season"], PHASE_ORDER.get(p["m"]["phase"], 9), p["m"]["round"], p["m"]["date"] or datetime.min, p["m"]["home"], minute_key({"min": p["min"]})))
 CRITICS = sorted([c for c in CRIT.values() if any(c["name"] in p["ops"] for p in PH)], key=lambda c: (KIND_ORDER.get(c["kind"], 2), c["order"], c["name"]))
@@ -1020,4 +1029,5 @@ open(os.path.join(OUT, "sitemap.xml"), "w", encoding="utf-8").write(
 if CFG.get("custom_domain"):
     open(os.path.join(OUT, "CNAME"), "w").write(CFG["custom_domain"] + "\n")
 open(os.path.join(OUT, ".nojekyll"), "w").write("")
+for w in WARN: print("ΠΡΟΣΟΧΗ: " + w)
 print(f"OK: {len(MATCHES)} αγώνες, {sum(len(m['var_items']) for m in MATCHES)} φάσεις VAR, {len(PH)} αμφισβητούμενες φάσεις, {len(PAGES)} σελίδες -> {OUT}")
