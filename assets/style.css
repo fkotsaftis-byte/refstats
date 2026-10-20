@@ -230,3 +230,8 @@ table.bal-t td.bal.pos{color:var(--pos)}table.bal-t td.bal.neg{color:var(--neg)}
 table.sortable th{cursor:pointer}
 table.bal-t .sm{display:none}
 @media (max-width:480px){table.bal-t .lg{display:none}table.bal-t .sm{display:inline}table.bal-t td,table.bal-t th{padding-left:8px;padding-right:8px}table.bal-t{width:100%}}
+/* εν μέρει */
+.pc-v .vb .p{background:color-mix(in srgb,var(--card) 45%,var(--surface))}
+.pc-v em.part{color:#B8860B}
+.cc.tmp{background:color-mix(in srgb,var(--card) 14%,transparent);border-color:color-mix(in srgb,var(--card) 50%,transparent);border-style:dotted}
+.v.part,.vs.part{color:#B8860B}
