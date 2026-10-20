@@ -178,9 +178,10 @@ for r in rows_opt("anakoinoseis"):
         ANN.append({"m": m, "team": t, "date": pdate(r.get("Ημερομηνία", "")), "text": r["Περίληψη"], "link": r.get("Link", "")})
 ANN.sort(key=lambda a: (a["date"] or datetime.min, a["m"]["date"] or datetime.min), reverse=True)
 TK = bool(PH or ANN)
-def consensus(p):
-    ok = sum(1 for c, o in p["ops"].items() if CRIT[c]["kind"] != "Δημοσιογράφος" and o["v"] == "Σωστή")
-    bad = sum(1 for c, o in p["ops"].items() if CRIT[c]["kind"] != "Δημοσιογράφος" and o["v"] == "Λάθος")
+def consensus(p, journalists=False):
+    grp = lambda c: (CRIT[c]["kind"] == "Δημοσιογράφος") == journalists
+    ok = sum(1 for c, o in p["ops"].items() if grp(c) and o["v"] == "Σωστή")
+    bad = sum(1 for c, o in p["ops"].items() if grp(c) and o["v"] == "Λάθος")
     if not ok and not bad: return None, ok, bad
     return ("Λάθος" if bad > ok else "Σωστή" if ok > bad else "Ισοψηφία"), ok, bad
 
@@ -899,8 +900,47 @@ def ann_page():
 <p class="note">Οι περιλήψεις είναι δικές μας και αποδίδουν τις θέσεις των ομάδων χωρίς να τις υιοθετούμε.</p>"""
     page(path, "Ανακοινώσεις ομάδων για τη διαιτησία στη Super League · refstats.gr",
          "Όλες οι επίσημες ανακοινώσεις των ομάδων της Super League για τη διαιτησία μετά από αγώνες: ποια ομάδα, για ποιον αγώνα και διαιτητή, με link στο πρωτότυπο.", body, "0.7")
+def balance_rows(phases, journalists):
+    T = {}
+    for p in phases:
+        pr = protester(p)
+        if not pr: continue
+        c, ok, bad = consensus(p, journalists)
+        if not (ok or bad): continue
+        for t in (p["m"]["home"], p["m"]["away"]):
+            r = T.setdefault(t, {"n": 0, "plus": 0, "minus": 0})
+            r["n"] += 1
+            if c == "Λάθος":
+                if t == p["ben"]: r["plus"] += 1
+                elif t == pr: r["minus"] += 1
+    return T
+def balance_table(here, phases, journalists):
+    T = balance_rows(phases, journalists)
+    if not T: return '<div class="empty">Δεν υπάρχουν ακόμα φάσεις με γνώμες.</div>'
+    rows = sorted(T.items(), key=lambda x: (-(x[1]["plus"] - x[1]["minus"]), -x[1]["n"], x[0]))
+    tr = ""
+    for t, r in rows:
+        b = r["plus"] - r["minus"]
+        k = "pos" if b > 0 else "neg" if b < 0 else "nil"
+        tr += (f'<tr><td class="l">{team_link(here, t)}</td><td data-v="{r["n"]}">{r["n"]}</td><td data-v="{r["plus"]}">{r["plus"]}</td>'
+               f'<td data-v="{r["minus"]}">{r["minus"]}</td><td data-v="{b}" class="bal {k}"><b>{"+" if b > 0 else "−" if b < 0 else ""}{abs(b)}</b></td></tr>')
+    return ('<div class="tablewrap"><table class="t sortable bal-t"><thead><tr><th class="l">Ομάδα</th><th>Φάσεις</th><th><span class="lg">Ευνοήθηκε</span><span class="sm">Υπέρ</span></th><th><span class="lg">Αδικήθηκε</span><span class="sm">Κατά</span></th><th><span class="lg">Ισοζύγιο</span><span class="sm">±</span></th></tr></thead>'
+            f'<tbody>{tr}</tbody></table></div>')
+def balance_page():
+    path = "tilekritiki/isozygio/"
+    cur = [p for p in PH if p["m"]["season"] == CUR] or PH
+    body = f"""<h1>Τηλεκριτική: ποιος ευνοήθηκε, ποιος αδικήθηκε</h1>
+<p class="lead">Πόσες λάθος αποφάσεις ευνόησαν ή αδίκησαν κάθε ομάδα στη σεζόν {esc(CUR)}, σύμφωνα με την πλειοψηφία των σχολιαστών.</p>
+{tk_tabs(path, path)}
+<h2>Κατά τους τηλεκριτικούς</h2>
+{balance_table(path, cur, False)}
+<h2>Κατά τους δημοσιογράφους</h2>
+{balance_table(path, cur, True)}
+<p class="note">Ευνοήθηκε: η ομάδα ωφελήθηκε από απόφαση που η πλειοψηφία έκρινε λάθος. Αδικήθηκε: η ομάδα διαμαρτυρήθηκε και η πλειοψηφία τής έδωσε δίκιο. Φάσεις: όσες αμφισβητούμενες φάσεις της ομάδας έκρινε η κάθε ομάδα σχολιαστών, μαζί με τις σωστές αποφάσεις και τις ισοψηφίες, που δεν αλλάζουν το ισοζύγιο. Μετράνε μόνο οι αμφισβητούμενες φάσεις που καταγράφουμε, όχι όλες οι αποφάσεις των αγώνων. <a href="{rel(path, "methodologia/")}#tilekritiki">Πώς επιλέγουμε</a></p>"""
+    page(path, f"Ισοζύγιο διαιτησίας Super League {CUR}: ποιος ευνοήθηκε κατά τους τηλεκριτικούς · refstats.gr",
+         f"Ποιες ομάδες της Super League ευνοήθηκαν ή αδικήθηκαν από λάθος αποφάσεις διαιτητών στη σεζόν {CUR}, κατά την πλειοψηφία των τηλεκριτικών και των δημοσιογράφων.", body, "0.8")
 def tk_tabs(here, cur):
-    t = [("tilekritiki/", "Φάσεις"), ("tilekritiki/sxoliastes/", "Σχολιαστές")] + ([("tilekritiki/anakoinoseis/", "Ανακοινώσεις")] if ANN else [])
+    t = [("tilekritiki/", "Φάσεις")] + ([("tilekritiki/isozygio/", "Ισοζύγιο")] if PH else []) + [("tilekritiki/sxoliastes/", "Σχολιαστές")] + ([("tilekritiki/anakoinoseis/", "Ανακοινώσεις")] if ANN else [])
     return '<nav class="subtabs">' + "".join(f'<a href="{rel(here, p)}"{" aria-current=\"page\"" if p == cur else ""}>{l}</a>' for p, l in t) + '</nav>'
 def critic_stats(c):
     mine = [p for p in PH if c["name"] in p["ops"]]
@@ -1011,6 +1051,8 @@ for s in SEASONS:
 rounds_index()
 if TK:
     tilekritiki_index()
+if PH:
+    balance_page()
 if ANN:
     ann_page()
 if PH:
