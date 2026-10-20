@@ -736,8 +736,11 @@ def phase_card(here, p):
     desc = f'<p class="pc-x">{esc(p["desc"])}</p>' if p["desc"] else ""
     return (f'<article class="pc" id="{ph_anchor(p)}"><div class="pc-h"><b>{esc(p["min"])}\'</b> {esc(p["cat"])}{" <span class=\"pill\">VAR</span>" if p["var"] else ""}</div>'
             f'<div class="pc-d">Διαμαρτυρήθηκε: <b>{esc(pr or "—")}</b><br>Απόφαση: {esc(p["dec"])}</div>'
-            f'{bar}<div class="pc-c">{chips}</div>'
-            f'<details><summary>Τι είπε ο καθένας</summary>{desc}<ul class="ops">{"".join(items)}</ul>{vid}</details></article>')
+            f'{bar}'
+            f'<details><summary>Τι είπε ο καθένας ({len(items)})</summary>{desc}<ul class="ops">{"".join(items)}</ul>{vid}</details></article>')
+def is_hot(mid):
+    ps = [p for p in PH if p["m"]["id"] == mid]
+    return len(ps) >= 3 or sum(len(p["ops"]) for p in ps) >= 10
 def phase_cards(here, phases, newest_first=True, head="h3", howto=True):
     groups, seen = {}, []
     for p in phases:
@@ -745,6 +748,7 @@ def phase_cards(here, phases, newest_first=True, head="h3", howto=True):
         if mid not in groups: groups[mid] = []; seen.append(mid)
         groups[mid].append(p)
     if newest_first: seen = list(reversed(seen))
+    seen.sort(key=lambda mid: (not is_hot(mid), -len(groups[mid])))  # stable: hot and busiest first
     out = []
     for mid in seen:
         ps = sorted(groups[mid], key=lambda p: minute_key({"min": p["min"]}))
@@ -753,6 +757,7 @@ def phase_cards(here, phases, newest_first=True, head="h3", howto=True):
         rp = round_path(m)
         title = f'{esc(m["home"])}–{esc(m["away"])}{score}'
         if rp in ROUNDPATHS and here != rp: title = f'<a href="{rel(here, rp)}">{title}</a>'
+        if is_hot(mid): title += ' <span class="hot" title="Από τα πιο πολυσυζητημένα: τουλάχιστον 3 αμφισβητούμενες φάσεις ή 10 γνώμες σχολιαστών">HOT</span>'
         sub = f'{round_label(m)} · Διαιτητής: {ref_link(here, m["ref"])}' if m.get("ref") else round_label(m)
         an = [a for a in ANN if a["m"]["id"] == mid]
         anl = ('<p class="an-flag">Επίσημη ανακοίνωση: ' + ", ".join(f'<a href="{rel(here, "tilekritiki/anakoinoseis/")}">{esc(a["team"])}</a>' for a in an) + '</p>') if an else ""
@@ -972,7 +977,18 @@ def tilekritiki_index():
     groups = {}
     for p in cur:
         groups.setdefault((PHASE_ORDER.get(p["m"]["phase"], 9), p["m"]["round"], p["m"]["phase"]), []).append(p)
-    secs = "".join(f'<h2>{round_label(v[0]["m"]).capitalize()}</h2>{phase_cards(path, v, howto=False)}' for k, v in sorted(groups.items(), reverse=True))
+    secs = ""
+    for i, (k, v) in enumerate(sorted(groups.items(), reverse=True)):
+        lab = round_label(v[0]["m"]).capitalize()
+        if i == 0:
+            secs += f'<h2>{lab}</h2>{phase_cards(path, v, howto=False)}'
+            if len(groups) > 1: secs += '<h2 style="margin-top:30px">Προηγούμενες αγωνιστικές</h2>'
+            continue
+        nm = len({p["m"]["id"] for p in v}); w = sum(1 for p in v if consensus(p)[0] in WRONG)
+        hot = sorted({f'{p["m"]["home"]}–{p["m"]["away"]}' for p in v if is_hot(p["m"]["id"])})
+        hs = f' · <span class="hot">HOT</span> {esc(", ".join(hot))}' if hot else ""
+        secs += (f'<details class="rd"><summary><b>{lab}</b><span>{len(v)} φάσ{"η" if len(v) == 1 else "εις"} σε {nm} αγών{"α" if nm == 1 else "ες"} · '
+                 f'{w} λάθος{hs}</span></summary>{phase_cards(path, v, howto=False, head="h3")}</details>')
     body = f"""<h1>Τηλεκριτική</h1>
 <p class="lead">Τι είπαν οι τηλεκριτικοί για τις αμφισβητούμενες φάσεις: {len(cur)} φάσ{"η" if len(cur) == 1 else "εις"}, {wrong} λάθος απόφασ{"η" if wrong == 1 else "εις"} κατά την πλειοψηφία τους.</p>
 {tk_tabs(path, path)}
