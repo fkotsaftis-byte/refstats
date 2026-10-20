@@ -50,12 +50,12 @@ def rows_opt(name):
     global _TK
     if _TK is None:
         _TK = {}
-        for k in ("sxoliastes", "faseis", "gnomes"):
+        for k in ("sxoliastes", "faseis", "gnomes", "anakoinoseis"):
             text = fetch_opt(k)
             if not text.strip():
                 continue
             hdr = {h.strip() for h in next(csv.reader(io.StringIO(text)))}
-            kind = "gnomes" if "Ετυμηγορία" in hdr else "faseis" if "Κατηγορία" in hdr else "sxoliastes" if "Ιδιότητα" in hdr else k
+            kind = "anakoinoseis" if "Περίληψη" in hdr else "gnomes" if "Ετυμηγορία" in hdr else "faseis" if "Κατηγορία" in hdr else "sxoliastes" if "Ιδιότητα" in hdr else k
             data = list(csv.DictReader(io.StringIO(text)))
             _TK[kind] = [{(a or "").strip(): (b or "").strip() for a, b in d.items()} for d in data]
     return _TK.get(name, [])
@@ -101,7 +101,7 @@ for r in rows("agones"):
     if not (r.get("ID") and r.get("Γηπεδούχος") and r.get("Φιλοξενούμενος")):
         continue
     ALLM[r["ID"]] = {"id": r["ID"], "season": r["Σεζόν"], "phase": r.get("Φάση") or "Κανονική", "round": num(r["Αγωνιστική"]),
-                     "date": pdate(r.get("Ημερομηνία", "")), "home": r["Γηπεδούχος"], "away": r["Φιλοξενούμενος"], "ref": r.get("Διαιτητής", "")}
+                     "date": pdate(r.get("Ημερομηνία", "")), "home": r["Γηπεδούχος"], "away": r["Φιλοξενούμενος"], "ref": r.get("Διαιτητής", ""), "var": r.get("VAR", "")}
     # A match appears on the site only once its card/penalty numbers are filled in.
     # Rows with these cells still empty (e.g. pasted fixtures) are skipped until completed.
     if not all((r.get(c) or "").strip() for c in ("Πέναλτι Γηπ", "Πέναλτι Φιλ", "Κίτρινες Γηπ", "Κίτρινες Φιλ")):
@@ -161,6 +161,14 @@ for r in rows_opt("gnomes"):
 PH = [p for p in PH if p["ops"]]
 PH.sort(key=lambda p: (p["m"]["season"], PHASE_ORDER.get(p["m"]["phase"], 9), p["m"]["round"], p["m"]["date"] or datetime.min, p["m"]["home"], minute_key({"min": p["min"]})))
 CRITICS = sorted([c for c in CRIT.values() if any(c["name"] in p["ops"] for p in PH)], key=lambda c: (KIND_ORDER.get(c["kind"], 2), c["order"], c["name"]))
+# ---- official club statements about the refereeing of a match
+ANN = []
+for r in rows_opt("anakoinoseis"):
+    m = ALLM.get(r.get("ID αγώνα", "")); t = r.get("Ομάδα", "")
+    if m and t in (m["home"], m["away"]) and r.get("Περίληψη"):
+        ANN.append({"m": m, "team": t, "date": pdate(r.get("Ημερομηνία", "")), "text": r["Περίληψη"], "link": r.get("Link", "")})
+ANN.sort(key=lambda a: (a["date"] or datetime.min, a["m"]["date"] or datetime.min), reverse=True)
+TK = bool(PH or ANN)
 def consensus(p):
     ok = sum(1 for c, o in p["ops"].items() if CRIT[c]["kind"] != "Δημοσιογράφος" and o["v"] == "Σωστή")
     bad = sum(1 for c, o in p["ops"].items() if CRIT[c]["kind"] != "Δημοσιογράφος" and o["v"] == "Λάθος")
@@ -269,7 +277,7 @@ var l=document.getElementById("ckset");if(l)l.addEventListener("click",function(
 
 def page(path, title, desc, body, priority="0.6", canonical=None):
     here = path
-    nav = [("", "Ομάδες"), ("diaitites/", "Διαιτητές"), ("agonistiki/", "Αγωνιστικές")] + ([("tilekritiki/", "Τηλεκριτική")] if PH else []) + [("methodologia/", "Μεθοδολογία")]
+    nav = [("", "Ομάδες"), ("diaitites/", "Διαιτητές"), ("agonistiki/", "Αγωνιστικές")] + ([("tilekritiki/", "Τηλεκριτική")] if TK else []) + [("methodologia/", "Μεθοδολογία")]
     sec = path.split("/")[0] + "/" if path else ""
     navh = "".join(f'<a href="{rel(here, p)}"{" aria-current=\"page\"" if (p == sec or (p == "" and sec in ("", "sezon/"))) else ""}>{l}</a>' for p, l in nav)
     can = SITE + "/" + (canonical if canonical is not None else path)
@@ -482,7 +490,7 @@ def team_page(team):
 <h2>Με κάθε διαιτητή</h2>
 <p class="lead">Ισοζύγιο ανά αγώνα με κάθε διαιτητή, σε σύγκριση με τον μέσο όρο της ομάδας ({avg:+.2f}). Όλες οι καταγεγραμμένες σεζόν.</p>
 <div class="tablewrap"><table class="t"><tr><th class="l">Διαιτητής</th><th>Αγώνες</th><th>Ν-Ι-Η</th><th>Ισοζύγιο</th><th>Ανά αγώνα</th><th>Διαφορά</th></tr>{rt}</table></div>
-{team_ph(path, team)}
+{team_ph(path, team)}{ann_block(path, [a for a in ANN if a["team"] == team])}
 <h2>Φάσεις VAR</h2>
 {var_list(path, ms, team)}
 <h2>Αγώνες</h2>
@@ -560,7 +568,7 @@ def ref_page(p):
         blocks.append(f"""<h2>Ισοζύγιο ανά ομάδα</h2>
 <p class="lead">Η διαφορά δείχνει πόσο απέχει το ισοζύγιο της ομάδας ανά αγώνα με αυτόν τον διαιτητή από τον μέσο όρο της με όλους.</p>
 <div class="tablewrap"><table class="t"><tr><th class="l">Ομάδα</th><th>Αγώνες</th><th>Ισοζύγιο</th><th>Ανά αγώνα</th><th>Μ.ο. ομάδας</th><th>Διαφορά</th></tr>{tr}</table></div>
-{ref_ph(path, p)}
+{ref_ph(path, p)}{ann_block(path, [a for a in ANN if p in (a["m"]["ref"], a["m"]["var"])], title="Ανακοινώσεις ομάδων για τους αγώνες του")}
 <h2>Φάσεις VAR στους αγώνες του</h2>{var_list(path, lst)}
 <h2>Αγώνες</h2>{match_table(path, lst)}""")
     if asvar:
@@ -627,7 +635,7 @@ def round_page(s, first):
 <p class="lead">Τι άφησε η διαιτησία σε κάθε αγώνα: πέναλτι, κόκκινες, ακυρωθέντα γκολ και επεμβάσεις VAR.</p>
 <div class="matches">{"".join(cards)}</div>
 <p class="note">Οι ετικέτες «VAR:» είναι αποφάσεις που άλλαξαν μετά από επέμβαση του VAR· οι υπόλοιπες δόθηκαν από τον διαιτητή στο γήπεδο. Είναι νούμερα, όχι κατηγορίες.</p>
-{round_ph(path, ms)}
+{round_ph(path, ms)}{ann_block(path, [a for a in ANN if a["m"]["id"] in {m["id"] for m in ms}])}
 <div class="pager">{prev}{nxt}</div>"""
     page(path, f"Διαιτησία {round_gen(first)} Super League {s} · refstats.gr",
          f"Οι διαιτητές της {round_gen(first)} της Super League {s}, τα πέναλτι, οι κάρτες και οι επεμβάσεις VAR αγώνα προς αγώνα.", body, "0.6")
@@ -720,7 +728,9 @@ def phase_cards(here, phases, newest_first=True, head="h3", howto=True):
         title = f'{esc(m["home"])}–{esc(m["away"])}{score}'
         if rp in ROUNDPATHS and here != rp: title = f'<a href="{rel(here, rp)}">{title}</a>'
         sub = f'{round_label(m)} · Διαιτητής: {ref_link(here, m["ref"])}' if m.get("ref") else round_label(m)
-        out.append(f'<section class="pm"><{head}>{title}</{head}><p class="note">{sub}</p><div class="pcs">{"".join(phase_card(here, p) for p in ps)}</div></section>')
+        an = [a for a in ANN if a["m"]["id"] == mid]
+        anl = ('<p class="an-flag">Επίσημη ανακοίνωση: ' + ", ".join(f'<a href="{rel(here, "tilekritiki/anakoinoseis/")}">{esc(a["team"])}</a>' for a in an) + '</p>') if an else ""
+        out.append(f'<section class="pm"><{head}>{title}</{head}><p class="note">{sub}</p>{anl}<div class="pcs">{"".join(phase_card(here, p) for p in ps)}</div></section>')
     return "".join(out) + (HOWTO if howto else "")
 HOWTO = ('<details class="howto"><summary>Πώς διαβάζεται</summary><p>Σε κάθε φάση φαίνεται ποια ομάδα διαμαρτυρήθηκε και τι αποφάσισε ο διαιτητής. '
          'Κάθε σχολιαστής πηγαίνει είτε με τον <b>διαιτητή</b> (έκρινε την απόφαση σωστή) είτε με την <b>ομάδα</b> που διαμαρτυρήθηκε (την έκρινε λάθος). '
@@ -846,8 +856,42 @@ def critic_page(c):
 {phase_details(path, list(reversed(mine)))}"""
     page(path, f'{c["name"]}: ανάλυση διαιτησίας Super League · refstats.gr',
          f'Οι αναλύσεις του {c["name"]} για τις αμφισβητούμενες φάσεις της Super League: πότε συμφώνησε και πότε διαφώνησε με τον διαιτητή.', body, "0.6")
+def ann_result(a):
+    bm = BYID.get(a["m"]["id"])
+    if not bm: return ""
+    mine, opp = (bm["gh"], bm["ga"]) if a["team"] == bm["home"] else (bm["ga"], bm["gh"])
+    return "Νίκη" if mine > opp else "Ήττα" if mine < opp else "Ισοπαλία"
+def ann_item(here, a, show_match=True):
+    m = a["m"]; bm = BYID.get(m["id"]); rp = round_path(m)
+    title = f'{esc(m["home"])}–{esc(m["away"])}' + (f' {bm["gh"]}–{bm["ga"]}' if bm else "")
+    if rp in ROUNDPATHS: title = f'<a href="{rel(here, rp)}">{title}</a>'
+    who = " · ".join(x for x in [f'Διαιτητής: {ref_link(here, m["ref"])}' if m.get("ref") else "", f'VAR: {ref_link(here, m["var"])}' if m.get("var") else ""] if x)
+    link = f' <a href="{esc(a["link"])}" rel="nofollow noopener" target="_blank">Η ανακοίνωση</a>' if a["link"].startswith("http") else ""
+    res = ann_result(a)
+    head = f'<b>{team_link(here, a["team"])}</b>' + (f' <span class="res r-{slugify(res)}">{res}</span>' if res else "")
+    match = f'<div class="an-m">{title} · {round_label(m)}{" · " + who if who else ""}</div>' if show_match else ""
+    return f'<article class="an"><div class="an-h">{head}<time>{fdate(a["date"])}</time></div>{match}<p>{esc(a["text"])}{link}</p></article>'
+def ann_block(here, anns, h="h2", title="Επίσημες ανακοινώσεις για τη διαιτησία", show_match=True):
+    if not anns: return ""
+    return f'<{h}>{title}</{h}><div class="ans">{"".join(ann_item(here, a, show_match) for a in anns)}</div>'
+def ann_page():
+    path = "tilekritiki/anakoinoseis/"
+    cnt = {}
+    for a in ANN:
+        c = cnt.setdefault(a["team"], {"n": 0, "Ήττα": 0, "Ισοπαλία": 0, "Νίκη": 0}); c["n"] += 1
+        if ann_result(a): c[ann_result(a)] += 1
+    tr = "".join(f'<tr><td class="l">{team_link(path, t)}</td><td>{c["n"]}</td><td>{c["Ήττα"]}</td><td>{c["Ισοπαλία"]}</td><td>{c["Νίκη"]}</td></tr>'
+                 for t, c in sorted(cnt.items(), key=lambda x: (-x[1]["n"], x[0])))
+    body = f"""<h1>Τηλεκριτική: ανακοινώσεις ομάδων</h1>
+<p class="lead">Οι επίσημες ανακοινώσεις των ομάδων για τη διαιτησία μετά από αγώνες της Super League, με περίληψη και link στο πρωτότυπο.</p>
+{tk_tabs(path, path)}
+<div class="tablewrap"><table class="t"><tr><th class="l">Ομάδα</th><th>Σύνολο</th><th>Μετά από ήττα</th><th>ισοπαλία</th><th>νίκη</th></tr>{tr}</table></div>
+<h2>Όλες οι ανακοινώσεις</h2><div class="ans">{"".join(ann_item(path, a) for a in ANN)}</div>
+<p class="note">Οι περιλήψεις είναι δικές μας και αποδίδουν τις θέσεις των ομάδων χωρίς να τις υιοθετούμε.</p>"""
+    page(path, "Ανακοινώσεις ομάδων για τη διαιτησία στη Super League · refstats.gr",
+         "Όλες οι επίσημες ανακοινώσεις των ομάδων της Super League για τη διαιτησία μετά από αγώνες: ποια ομάδα, για ποιον αγώνα και διαιτητή, με link στο πρωτότυπο.", body, "0.7")
 def tk_tabs(here, cur):
-    t = [("tilekritiki/", "Φάσεις"), ("tilekritiki/sxoliastes/", "Σχολιαστές")]
+    t = [("tilekritiki/", "Φάσεις"), ("tilekritiki/sxoliastes/", "Σχολιαστές")] + ([("tilekritiki/anakoinoseis/", "Ανακοινώσεις")] if ANN else [])
     return '<nav class="subtabs">' + "".join(f'<a href="{rel(here, p)}"{" aria-current=\"page\"" if p == cur else ""}>{l}</a>' for p, l in t) + '</nav>'
 def critic_stats(c):
     mine = [p for p in PH if c["name"] in p["ops"]]
@@ -909,6 +953,8 @@ def static_pages():
 <h2>Τι δεν δείχνουν τα νούμερα</h2>
 <p>Ένα θετικό ισοζύγιο δεν σημαίνει εύνοια. Μια ομάδα που επιτίθεται περισσότερο κερδίζει περισσότερα πέναλτι. Γι' αυτό στις σελίδες ομάδων και διαιτητών συγκρίνουμε κάθε ομάδα με τον δικό της μέσο όρο. Συνδυασμοί διαιτητή και ομάδας με λιγότερους από 5 αγώνες σημειώνονται ως μικρό δείγμα.</p>
 <h2 id="tilekritiki">Τηλεκριτική</h2>
+<h3>Ανακοινώσεις ομάδων</h3>
+<p>Καταγράφουμε τις επίσημες ανακοινώσεις των ομάδων για τη διαιτησία που βγαίνουν μετά από αγώνα. Η περίληψη είναι δική μας και αποδίδει τις θέσεις της ομάδας χωρίς να τις υιοθετούμε· το πλήρες κείμενο βρίσκεται στο link της πηγής.</p>
 <h3>Ποιες φάσεις μπαίνουν</h3>
 <p>Δεν καταγράφουμε κάθε φάση που σχολίασαν οι τηλεκριτικοί, μόνο όσες αμφισβητήθηκαν πραγματικά. Μια φάση μπαίνει όταν ισχύει τουλάχιστον ένα από τα παρακάτω:</p>
 <ul><li>τουλάχιστον ένας τηλεκριτικός έκρινε την απόφαση λάθος ή οριακή·</li>
@@ -954,8 +1000,11 @@ for s in SEASONS:
     for first in rounds_of(season_ms(s)):
         round_page(s, first)
 rounds_index()
-if PH:
+if TK:
     tilekritiki_index()
+if ANN:
+    ann_page()
+if PH:
     for c in CRITICS:
         critic_page(c)
 static_pages()
