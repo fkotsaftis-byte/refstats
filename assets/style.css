@@ -245,3 +245,4 @@ table.bal-t .sm{display:none}
 .rd>summary .hot{color:#fff;vertical-align:1px;margin-left:0}
 .rd[open]{padding-bottom:6px}.rd .pm{margin-top:4px}
 .pc details summary{list-style:revert}
+.pc-v em.one{color:var(--muted);font-weight:600}
