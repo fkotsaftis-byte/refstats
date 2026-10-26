@@ -285,7 +285,15 @@ def round_path(m): return f"agonistiki/{m['season']}/{slugify(m['phase'])}-{m['r
 def round_gen(m): return f"{m['round']}ης αγωνιστικής" + ("" if m["phase"] == "Κανονική" else f" ({m['phase']})")
 def round_label(m): return f"{m['round']}η αγωνιστική" + ("" if m["phase"] == "Κανονική" else f" ({m['phase']})")
 
-NOW = datetime.now(timezone(timedelta(hours=3)))
+def athens_tz(utc):
+    """Greek local time: UTC+3 from the last Sunday of March to the last Sunday of October (01:00 UTC), else UTC+2."""
+    def last_sunday(y, m):
+        d = datetime(y, m, 31, 1, tzinfo=timezone.utc)
+        return d - timedelta(days=(d.weekday() + 1) % 7)
+    y = utc.year
+    return timezone(timedelta(hours=3 if last_sunday(y, 3) <= utc < last_sunday(y, 10) else 2))
+def to_athens(dt): return dt.astimezone(athens_tz(dt.astimezone(timezone.utc)))
+NOW = to_athens(datetime.now(timezone.utc))
 # "Τελευταία ενημέρωση" = when the data last changed, not when the site was rebuilt.
 # The previous build publishes data-stamp.json; if the sheets are identical we keep its time.
 import hashlib
@@ -297,7 +305,7 @@ if not LOCAL:
         with urllib.request.urlopen(req, timeout=20) as r:
             prev = json.loads(r.read().decode("utf-8"))
         if prev.get("hash") == DATA_HASH and prev.get("updated"):
-            DATA_TIME = datetime.fromisoformat(prev["updated"])
+            DATA_TIME = to_athens(datetime.fromisoformat(prev["updated"]))
     except Exception as e:
         print(f"Σημείωση: δεν διαβάστηκε το προηγούμενο data-stamp ({e}), κρατάω την τρέχουσα ώρα.")
 UPDATED = DATA_TIME.strftime("%d/%m/%Y %H:%M")
