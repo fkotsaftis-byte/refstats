@@ -21,12 +21,16 @@ LOCAL = sys.argv[sys.argv.index("--local") + 1] if "--local" in sys.argv else No
 SITE = CFG["site_url"].rstrip("/")
 
 # ---------------------------------------------------------------- data in
+SEEN = {}  # every sheet read in this build, to tell when the data really changed
 def fetch(name):
     if LOCAL:
-        return open(os.path.join(LOCAL, name + ".csv"), encoding="utf-8").read()
-    req = urllib.request.Request(CFG["csv"][name], headers={"User-Agent": "refstats-build"})
-    with urllib.request.urlopen(req, timeout=60) as r:
-        return r.read().decode("utf-8")
+        text = open(os.path.join(LOCAL, name + ".csv"), encoding="utf-8").read()
+    else:
+        req = urllib.request.Request(CFG["csv"][name], headers={"User-Agent": "refstats-build"})
+        with urllib.request.urlopen(req, timeout=60) as r:
+            text = r.read().decode("utf-8")
+    SEEN[name] = text
+    return text
 
 def rows(name):
     data = list(csv.DictReader(io.StringIO(fetch(name))))
@@ -282,7 +286,21 @@ def round_gen(m): return f"{m['round']}ης αγωνιστικής" + ("" if m["
 def round_label(m): return f"{m['round']}η αγωνιστική" + ("" if m["phase"] == "Κανονική" else f" ({m['phase']})")
 
 NOW = datetime.now(timezone(timedelta(hours=3)))
-UPDATED = NOW.strftime("%d/%m/%Y %H:%M")
+# "Τελευταία ενημέρωση" = when the data last changed, not when the site was rebuilt.
+# The previous build publishes data-stamp.json; if the sheets are identical we keep its time.
+import hashlib
+DATA_HASH = hashlib.sha256("".join(k + "\0" + SEEN[k] for k in sorted(SEEN)).encode("utf-8")).hexdigest()
+DATA_TIME = NOW
+if not LOCAL:
+    try:
+        req = urllib.request.Request(SITE + "/data-stamp.json", headers={"User-Agent": "refstats-build"})
+        with urllib.request.urlopen(req, timeout=20) as r:
+            prev = json.loads(r.read().decode("utf-8"))
+        if prev.get("hash") == DATA_HASH and prev.get("updated"):
+            DATA_TIME = datetime.fromisoformat(prev["updated"])
+    except Exception as e:
+        print(f"Σημείωση: δεν διαβάστηκε το προηγούμενο data-stamp ({e}), κρατάω την τρέχουσα ώρα.")
+UPDATED = DATA_TIME.strftime("%d/%m/%Y %H:%M")
 
 GA4 = (CFG.get("ga4_id") or "").strip()
 if GA4 and not re.fullmatch(r"G-[A-Z0-9]+", GA4):
@@ -1098,7 +1116,8 @@ static_pages()
 page("404/", "Η σελίδα δεν βρέθηκε · refstats.gr", "", f'<h1>Η σελίδα δεν βρέθηκε</h1><p class="lead"><a href="/">Επιστροφή στην αρχική</a></p>', canonical="")
 shutil.move(os.path.join(OUT, "404", "index.html"), os.path.join(OUT, "404.html")); os.rmdir(os.path.join(OUT, "404"))
 open(os.path.join(OUT, "robots.txt"), "w").write(f"User-agent: *\nAllow: /\nSitemap: {SITE}/sitemap.xml\n")
-today = NOW.strftime("%Y-%m-%d")
+today = DATA_TIME.strftime("%Y-%m-%d")
+open(os.path.join(OUT, "data-stamp.json"), "w", encoding="utf-8").write(json.dumps({"hash": DATA_HASH, "updated": DATA_TIME.isoformat()}))
 open(os.path.join(OUT, "sitemap.xml"), "w", encoding="utf-8").write(
     '<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'
     + "".join(f"<url><loc>{esc(SITE + '/' + p)}</loc><lastmod>{today}</lastmod><priority>{pr}</priority></url>\n" for p, pr in PAGES)
