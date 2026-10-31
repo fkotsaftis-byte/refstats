@@ -854,44 +854,56 @@ def _dcell(d):
     if d is None: return '<td>—</td>'
     k = "up" if d >= 10 else "dn" if d <= -10 else ""
     return f'<td class="dd {k}"><b>{"+" if d > 0 else "−" if d < 0 else ""}{abs(d)}</b></td>'
-def lean_table(cname, mode):
-    rws = []
-    for t in lean_teams():
-        n, mine, oth = lean(cname, t, mode)
-        if not n: continue
-        if n < MIN_N:
-            rws.append((n, f'<tr><td class="l">{esc(t)}</td><td>{n}</td><td colspan="3" class="few">λίγα δεδομένα ακόμα</td></tr>'))
-        else:
-            rws.append((n + 1000, f'<tr><td class="l">{esc(t)}</td><td>{n}</td><td>{_pct(mine)}</td><td>{_pct(oth) if oth is not None else "—"}</td>{_dcell(_diff(mine, oth))}</tr>'))
-    if not rws: return '<p class="note">Δεν υπάρχουν ακόμα φάσεις.</p>'
-    col = "Δίκιο στην ομάδα" if mode == "prot" else "Σωστός ο διαιτητής"
-    first = "Όταν διαμαρτύρεται" if mode == "prot" else "Όταν διαμαρτύρεται ο αντίπαλός της"
-    return (f'<div class="tablewrap"><table class="t lean"><tr><th class="l">{first}</th><th>Φάσεις</th><th>{col}</th><th>Οι άλλοι τηλεκριτικοί</th><th>Διαφορά</th></tr>'
-            + "".join(r for _, r in sorted(rws, key=lambda x: x[0] < 1000)) + '</table></div>')
-def lean_map(here):
-    teams = [t for t in lean_teams() if any(lean(c["name"], t, "all")[0] >= MIN_N for c in CRITICS)]
-    if not teams:
-        return (f'<h2>Με ποιον πάει κάθε σχολιαστής</h2><div class="empty">Ο χάρτης εμφανίζεται όταν ένας σχολιαστής έχει κρίνει τουλάχιστον {MIN_N} φάσεις '
-                f'μιας ομάδας, από {MIN_M} διαφορετικούς αγώνες. Μέχρι τότε δεν βγάζουμε συμπέρασμα.</div>')
-    hh = '<tr><th class="l">Σχολιαστής</th>' + "".join(f'<th title="{esc(t)}">{esc(short(t))}</th>' for t in teams) + '</tr>'
-    tr = ""
-    for c in CRITICS:
+def sides(cname, team):
+    """Phases where `team` protested and the critic gave a verdict: (with the team, partly with the team, with the referee)."""
+    t = pt = r = 0
+    for p in PH:
+        o = p["ops"].get(cname)
+        if not o or protester(p) != team: continue
+        if o["v"] == "Λάθος": t += 1
+        elif o["v"] == "Εν μέρει": pt += 1
+        elif o["v"] == "Σωστή": r += 1
+    return t, pt, r
+def half(x):
+    w = int(x)
+    return (str(w) if w else "") + "½" if x - w else str(w)
+def sides_table(cname):
+    rows = []
+    for team in lean_teams():
+        t, pt, r = sides(cname, team)
+        if t + pt + r == 0: continue
+        tc = f'{t}' + (f' <small>+{pt} εν μέρει</small>' if pt else "")
+        rows.append(f'<tr><td class="l">{esc(team)}</td><td>{t + pt + r}</td><td class="sd-t">{tc}</td><td class="sd-r">{r}</td></tr>')
+    if not rows: return '<p class="note">Δεν έχει κρίνει ακόμα φάση όπου διαμαρτυρήθηκε κάποια ομάδα.</p>'
+    return ('<div class="tablewrap"><table class="t sides"><tr><th class="l">Ομάδα</th><th>Φάσεις</th><th>Με την ομάδα</th><th><span class="lg">Με τον διαιτητή</span><span class="sm">Με διαιτητή</span></th></tr>'
+            + "".join(rows) + '</table></div>')
+def sides_map(here):
+    teams = [t for t in lean_teams() if any(sum(sides(c["name"], t)) for c in CRITICS)]
+    if not teams: return ""
+    def grid(group, label):
+        hh = f'<tr><th class="l">{label}</th>' + "".join(f'<th title="{esc(t)}">{esc(short(t))}</th>' for t in teams) + '</tr>'
+        return f'<div class="tablewrap"><table class="t hmap">{hh}{rows(group)}</table></div>'
+    def rows(group):
+      tr = ""
+      for c in group:
         cells = ""
         for t in teams:
-            n, mine, oth = lean(c["name"], t, "all")
-            d = _diff(mine, oth) if n >= MIN_N else None
-            if d is None:
-                cells += f'<td class="hm nil" title="{esc(t)}: {n} φάσεις">·</td>'
-            else:
-                a = min(abs(d), 40) / 40 * 55 + 8
-                col = "var(--card)" if d > 0 else "#3B6FB6"
-                cells += (f'<td class="hm" style="background:color-mix(in srgb,{col} {a:.0f}%,transparent)" '
-                          f'title="{esc(t)}: {n} φάσεις · {_pct(mine)} υπέρ, οι άλλοι {_pct(oth)}">{"+" if d > 0 else "−" if d < 0 else ""}{abs(d)}</td>')
-        tr += f'<tr><td class="l"><a href="{rel(here, "tilekritiki/" + c["slug"] + "/")}">{esc(c["name"])}</a></td>{cells}</tr>'
-    return (f'<h2>Με ποιον πάει κάθε σχολιαστής</h2><p class="lead">Σε όλες τις φάσεις μιας ομάδας, πόσο πιο συχνά από τους άλλους τηλεκριτικούς ο σχολιαστής κρίνει υπέρ της, '
-            f'είτε δίνοντάς της δίκιο όταν διαμαρτύρεται είτε βγάζοντας σωστό τον διαιτητή όταν διαμαρτύρεται ο αντίπαλος. Σε ποσοστιαίες μονάδες, στις ίδιες ακριβώς φάσεις.</p>'
-            f'<div class="tablewrap"><table class="t hmap">{hh}{tr}</table></div>'
-            f'<p class="note">Θετικό (κίτρινο): κρίνει υπέρ της ομάδας συχνότερα από τους άλλους. Αρνητικό (μπλε): σπανιότερα. · σημαίνει ότι δεν υπάρχουν ακόμα αρκετά δεδομένα. Πέρασε τον δείκτη πάνω από ένα κελί για τα νούμερα.</p>')
+            a, pt, r = sides(c["name"], t)
+            if a + pt + r == 0:
+                cells += '<td class="hm nil">·</td>'; continue
+            team = a + 0.5 * pt
+            k = "up" if team > r else "dn" if r > team else ""
+            tip = f'{t}: δικαίωσε την ομάδα {a}' + (f' (+{pt} εν μέρει)' if pt else "") + f', τον διαιτητή {r}'
+            cells += f'<td class="hm sm {k}" title="{esc(tip)}"><b>{half(team)}</b>–{r}</td>'
+        if any(sum(sides(c["name"], t)) for t in teams):
+            tr += f'<tr><td class="l"><a href="{rel(here, "tilekritiki/" + c["slug"] + "/")}">{esc(c["name"])}</a></td>{cells}</tr>'
+      return tr
+    tele = [c for c in CRITICS if c["kind"] != "Δημοσιογράφος"]; jour = [c for c in CRITICS if c["kind"] == "Δημοσιογράφος"]
+    jt = rows(jour)
+    return (f'<h2>Ποιον δικαιώνει κάθε σχολιαστής</h2><p class="lead">Όταν διαμαρτυρήθηκε μια ομάδα: πόσες φορές ο σχολιαστής έδωσε δίκιο στην ομάδα και πόσες στον διαιτητή.</p>'
+            + grid(tele, "Τηλεκριτικοί")
+            + (f'<details class="rd"><summary><b>Δημοσιογράφοι</b><span>{jt.count("<tr>")} σχολιαστές</span></summary>{grid(jour, "Δημοσιογράφοι")}</details>' if jt else "")
+            + f'<p class="note">Σε κάθε κελί: <b>ομάδα</b>–διαιτητής. Μια κρίση «εν μέρει» μετράει μισή (½) για την ομάδα. Κίτρινο: έδωσε δίκιο στην ομάδα πιο συχνά· γκρι: στον διαιτητή. · σημαίνει ότι δεν έχει κρίνει φάση της ομάδας.</p>')
 def critic_page(c):
     path = f'tilekritiki/{c["slug"]}/'
     mine = [p for p in PH if c["name"] in p["ops"]]
@@ -905,13 +917,9 @@ def critic_page(c):
 <h1>{esc(c["name"])}: τι λέει για τη διαιτησία</h1>
 <p class="lead">{esc(c["kind"])}{" · " + esc(c["outlet"]) if c["outlet"] else ""}. Οι τοποθετήσεις του για τις αμφισβητούμενες φάσεις της Super League, με πηγή για καθεμία.</p>
 {k}
-<h2>Με ποιον πάει</h2>
-<p class="lead">Πόσο συχνά ο {esc(c["name"])} κρίνει υπέρ κάθε ομάδας, σε σύγκριση με τους άλλους τηλεκριτικούς στις ίδιες ακριβώς φάσεις. Μετράνε μόνο οι φάσεις όπου είπε σωστή ή λάθος απόφαση.</p>
-<h3>Όταν διαμαρτύρεται η ομάδα</h3>
-{lean_table(c["name"], "prot")}
-<h3>Όταν διαμαρτύρεται ο αντίπαλός της</h3>
-{lean_table(c["name"], "opp")}
-<p class="note">Διαφορά: ποσοστιαίες μονάδες πάνω ή κάτω από τους άλλους τηλεκριτικούς. Ποσοστό δείχνουμε από {MIN_N} φάσεις σε τουλάχιστον {MIN_M} αγώνες.</p>
+<h2>Ποιον δικαιώνει</h2>
+<p class="lead">Σε κάθε φάση όπου διαμαρτυρήθηκε μια ομάδα: πόσες φορές ο {esc(c["name"])} έδωσε δίκιο στην ομάδα και πόσες στον διαιτητή.</p>
+{sides_table(c["name"])}
 <h2>Φάσεις</h2>
 {phase_details(path, list(reversed(mine)))}"""
     page(path, f'{c["name"]}: ανάλυση διαιτησίας Super League · refstats.gr',
@@ -1042,7 +1050,7 @@ def tilekritiki_index():
 {tk_tabs(path, path)}
 {tables}
 <p class="note">«Με τον διαιτητή»: ποσοστό φάσεων που έκρινε την απόφαση σωστή. «Με την πλειοψηφία»: πόσο συχνά η κρίση του (σωστή/λάθος) συμπίπτει με την πλειοψηφία των τηλεκριτικών.</p>
-{lean_map(path)}"""
+{sides_map(path)}"""
     page(path, "Τηλεκριτικοί διαιτησίας Super League: ποιος συμφωνεί με ποιον · refstats.gr",
          "Οι τηλεκριτικοί και οι δημοσιογράφοι που σχολιάζουν τη διαιτησία της Super League: πόσο συχνά δικαιώνουν τον διαιτητή και πώς κρίνουν τις φάσεις κάθε ομάδας.", body, "0.7")
 
@@ -1074,7 +1082,7 @@ def static_pages():
 <p>Για τις αμφισβητούμενες φάσεις κάθε αγωνιστικής καταγράφουμε τι είπαν δημόσια οι τηλεκριτικοί διαιτησίας και δημοσιογράφοι που σχολιάζουν τη διαιτησία. Κάθε τοποθέτηση έχει πηγή και αποδίδεται με δικά μας λόγια σε μία πρόταση. «Σωστή» σημαίνει ότι ο σχολιαστής συμφώνησε με την τελική απόφαση, «Λάθος» ότι διαφώνησε, «Εν μέρει» ότι ο διαιτητής έκανε λάθος αλλά μικρότερο από όσο καταγγέλλει η ομάδα (π.χ. η ομάδα ζητούσε κόκκινη, έπρεπε φάουλ και κίτρινη, δεν δόθηκε τίποτα) και «Οριακή» ότι τη θεώρησε αμφίβολη ή δεν πήρε ξεκάθαρη θέση. Στα ισοζύγια μια απόφαση «εν μέρει λάθος» μετράει μισή. Συμπέρασμα βγάζουμε μόνο όταν έχουν τοποθετηθεί τουλάχιστον δύο τηλεκριτικοί (ή δύο δημοσιογράφοι, για τον πίνακα των δημοσιογράφων)· μια φάση με μία μόνο γνώμη εμφανίζεται, αλλά δεν μετράει στα ισοζύγια.</p>
 <p>Το συμπέρασμα κάθε φάσης είναι η απλή πλειοψηφία μόνο των τηλεκριτικών· οι δημοσιογράφοι εμφανίζονται χωριστά και δεν μετρούν σε αυτό. Αν ένας σχολιαστής θεωρεί ότι η θέση του αποδόθηκε λάθος, τη διορθώνουμε.</p>
 <p>Ομάδα που διαμαρτυρήθηκε είναι η αντίπαλη αυτής που ωφελήθηκε από την απόφαση. Όταν ένας σχολιαστής κρίνει την απόφαση σωστή, πηγαίνει με τον διαιτητή· όταν την κρίνει λάθος, δίνει δίκιο στην ομάδα που διαμαρτυρήθηκε.</p>
-<p>Στο «Με ποιον πάει» συγκρίνουμε κάθε σχολιαστή με τους υπόλοιπους τηλεκριτικούς στις ίδιες ακριβώς φάσεις, ώστε να μη μετράει το αν μια ομάδα αδικήθηκε πράγματι πολλές φορές. Οι οριακές τοποθετήσεις δεν μετρούν, και ποσοστό δείχνουμε μόνο από {MIN_N} φάσεις σε τουλάχιστον {MIN_M} διαφορετικούς αγώνες. Τα νούμερα περιγράφουν τοποθετήσεις, δεν χαρακτηρίζουν πρόσωπα.</p>
+<p>Στο «Ποιον δικαιώνει» μετράμε, για κάθε σχολιαστή και κάθε ομάδα, τις φάσεις όπου διαμαρτυρήθηκε η ομάδα: πόσες φορές ο σχολιαστής τής έδωσε δίκιο και πόσες έδωσε δίκιο στον διαιτητή. Οι οριακές τοποθετήσεις δεν μετρούν. Τα νούμερα περιγράφουν τοποθετήσεις, δεν χαρακτηρίζουν πρόσωπα.</p>
 <h2>Πηγές</h2>
 <p>Ορισμοί της ΚΕΔ, επίσημα φύλλα αγώνα και βίντεο των φάσεων. Κάθε αγώνας και κάθε φάση VAR στη βάση έχει πηγή. Αν βρεις λάθος, στείλε μας την πηγή και θα το διορθώσουμε.</p>
 </div>""", "0.4")
