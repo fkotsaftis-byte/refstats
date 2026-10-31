@@ -311,6 +311,7 @@ if not LOCAL:
 UPDATED = DATA_TIME.strftime("%d/%m/%Y %H:%M")
 
 GA4 = (CFG.get("ga4_id") or "").strip()
+POLL = (CFG.get("poll_api") or "").strip().rstrip("/")  # Cloudflare Worker for readers' votes; empty = no polls
 if GA4 and not re.fullmatch(r"G-[A-Z0-9]+", GA4):
     print(f"Προειδοποίηση: το ga4_id «{GA4}» δεν μοιάζει με κωδικό GA4 (G-XXXXXXX) και αγνοήθηκε.")
     GA4 = ""
@@ -732,6 +733,11 @@ def side_of(p, o):
     if o["v"] == "Σωστή": return "Διαιτητής", "ref"
     if o["v"] == "Εν μέρει": return ((short(pr) + " εν μέρει") if pr else "Εν μέρει"), "tmp"
     return (short(pr), "tm") if pr else ("Λάθος", "tm")
+def poll_box(p, pr):
+    if not (POLL and pr): return ""
+    t = esc(short(pr))
+    return (f'<div class="poll" data-api="{esc(POLL)}" data-id="{ph_anchor(p)}" data-team="{t}"><span class="pq">Εσύ τι λες;</span>'
+            f'<button type="button" data-s="t">Με {t}</button><button type="button" data-s="r">Με διαιτητή</button><div class="pres" hidden></div></div>')
 def phase_card(here, p):
     pr = protester(p)
     c, ok, bad = consensus(p)
@@ -765,7 +771,7 @@ def phase_card(here, p):
     desc = f'<p class="pc-x">{esc(p["desc"])}</p>' if p["desc"] else ""
     return (f'<article class="pc" id="{ph_anchor(p)}"><div class="pc-h"><b>{esc(p["min"])}\'</b> {esc(p["cat"])}{" <span class=\"pill\">VAR</span>" if p["var"] else ""}</div>'
             f'<div class="pc-d">Διαμαρτυρήθηκε: <b>{esc(pr or "—")}</b><br>Απόφαση: {esc(p["dec"])}</div>'
-            f'{bar}'
+            f'{bar}{poll_box(p, pr)}'
             f'<details><summary>Τι είπε ο καθένας ({len(items)})</summary>{desc}<ul class="ops">{"".join(items)}</ul>{vid}</details></article>')
 def is_hot(mid):
     ps = [p for p in PH if p["m"]["id"] == mid]
