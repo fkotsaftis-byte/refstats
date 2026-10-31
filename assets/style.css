@@ -246,3 +246,14 @@ table.bal-t .sm{display:none}
 .rd[open]{padding-bottom:6px}.rd .pm{margin-top:4px}
 .pc details summary{list-style:revert}
 .pc-v em.one{color:var(--muted);font-weight:600}
+/* ποιον δικαιώνει */
+table.sides td.sd-t{font-weight:700}table.sides small{font-weight:400;color:var(--muted)}
+table.hmap td.hm.sm{font-family:var(--body);font-size:14px;font-weight:400;white-space:nowrap}
+table.hmap td.hm.sm b{font-weight:800}
+table.hmap td.hm.up{background:color-mix(in srgb,var(--card) 30%,transparent)}
+table.hmap td.hm.dn{background:color-mix(in srgb,var(--bar) 12%,transparent)}
+table.sides .sm{display:none}
+@media (max-width:480px){table.sides .lg{display:none}table.sides .sm{display:inline}table.sides td,table.sides th{padding-left:8px;padding-right:8px}}
+table.sides th{white-space:normal;line-height:1.25;vertical-align:bottom}
+table.sides small{display:block;font-size:11px;white-space:nowrap}
+@media (max-width:480px){table.sides th{font-size:10px}}
