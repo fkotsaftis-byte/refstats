@@ -51,3 +51,40 @@
     });
   });
 })();
+/* ψηφοφορία αναγνωστών στις αμφισβητούμενες φάσεις */
+(function () {
+  var polls = Array.prototype.slice.call(document.querySelectorAll(".poll"));
+  if (!polls.length || !window.fetch) return;
+  var api = polls[0].getAttribute("data-api"), KEY = "rs_votes", mine = {};
+  try { mine = JSON.parse(localStorage.getItem(KEY) || "{}") || {}; } catch (e) { mine = {}; }
+  function save() { try { localStorage.setItem(KEY, JSON.stringify(mine)); } catch (e) {} }
+  function render(p, c) {
+    var id = p.getAttribute("data-id"), team = p.getAttribute("data-team"), out = p.querySelector(".pres");
+    var t = c.t || 0, r = c.r || 0, n = t + r, voted = mine[id];
+    if (!voted) { out.hidden = !n; out.textContent = n ? n + (n === 1 ? " ψήφος" : " ψήφοι") + " ως τώρα" : ""; return; }
+    var pt = n ? Math.round(100 * t / n) : 0;
+    p.classList.add("done");
+    out.hidden = false;
+    out.innerHTML = '<div class="pbar"><i style="width:' + pt + '%"></i></div>' +
+      '<span>Αναγνώστες: <b>' + pt + "%</b> με " + team + " · <b>" + (100 - pt) + "%</b> με διαιτητή (" + n + (n === 1 ? " ψήφος" : " ψήφοι") + ")</span>";
+  }
+  var ids = polls.map(function (p) { return p.getAttribute("data-id"); }), byId = {};
+  polls.forEach(function (p) { byId[p.getAttribute("data-id")] = p; });
+  for (var i = 0; i < ids.length; i += 60) {
+    fetch(api + "/results?ids=" + ids.slice(i, i + 60).join(","))
+      .then(function (r) { return r.json(); })
+      .then(function (d) { Object.keys(d).forEach(function (k) { if (byId[k]) render(byId[k], d[k]); }); })
+      .catch(function () { polls.forEach(function (p) { p.hidden = true; }); });
+  }
+  polls.forEach(function (p) {
+    p.addEventListener("click", function (e) {
+      var b = e.target.closest("button"); if (!b || p.classList.contains("done")) return;
+      var id = p.getAttribute("data-id");
+      p.classList.add("busy");
+      fetch(api + "/vote", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: id, side: b.getAttribute("data-s") }) })
+        .then(function (r) { return r.json(); })
+        .then(function (c) { mine[id] = b.getAttribute("data-s"); save(); p.classList.remove("busy"); render(p, c); })
+        .catch(function () { p.classList.remove("busy"); });
+    });
+  });
+})();
