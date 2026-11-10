@@ -147,7 +147,8 @@ for i, r in enumerate(rows_opt("sxoliastes")):
     n = r.get("Σχολιαστής", "")
     if n:
         CRIT[n] = {"name": n, "slug": r.get("Slug (URL)") or slugify(n), "kind": r.get("Ιδιότητα") or "Τηλεκριτικός",
-                   "outlet": r.get("Μέσο", ""), "order": i}
+                   "outlet": r.get("Μέσο", ""), "order": i,
+                   "fem": (r.get("Φύλο", "") or "").strip().lower() in ("γυναίκα", "θηλυκό", "θ", "γ", "f")}
 PH, PHBY = [], {}
 WARN = []
 for i, r in enumerate(rows_opt("faseis"), start=2):
@@ -167,7 +168,7 @@ for i, r in enumerate(rows_opt("gnomes"), start=2):
     if v not in ("Σωστή", "Λάθος", "Εν μέρει", "Οριακή"): WARN.append(f"Γνώμες γρ.{i}: άγνωστη Ετυμηγορία «{v}»"); continue
     if not c: WARN.append(f"Γνώμες γρ.{i}: λείπει ο Σχολιαστής"); continue
     if p and c and v in ("Σωστή", "Λάθος", "Εν μέρει", "Οριακή"):
-        CRIT.setdefault(c, {"name": c, "slug": slugify(c), "kind": "Τηλεκριτικός", "outlet": "", "order": 999})
+        CRIT.setdefault(c, {"name": c, "slug": slugify(c), "kind": "Τηλεκριτικός", "outlet": "", "order": 999, "fem": False})
         p["ops"][c] = {"v": v, "should": r.get("Τι έπρεπε να δοθεί", ""), "why": r.get("Αιτιολογία", ""), "src": r.get("Πηγή", "")}
 WARN += [f"Φάσεις: η φάση «{p['code']}» δεν έχει καμία γνώμη, δεν εμφανίζεται" for p in PH if not p["ops"]]
 WARN += [f"Φάσεις: η φάση «{p['code']}» δεν έχει Ωφελημένη ομάδα του αγώνα" for p in PH if p["ops"] and p["ben"] not in (p["m"]["home"], p["m"]["away"])]
@@ -471,15 +472,40 @@ def podiums(here, ms, T):
     card("c-pink", "Ο διαιτητής των πέναλτι", f"{v:.2f}".rstrip("0").rstrip(".").replace(".", ",") if v is not None else "—", f"πέναλτι ανά αγώνα · τουλάχιστον {mn} αγώνες", w, "ref")
     return f'{strip}<h2 class="podh"><span>Τα ρεκόρ της σεζόν</span></h2><div class="pods">{"".join(cards)}</div>'
 
+def season_errors(path, s, limit=8):
+    ph = [p for p in PH if p["m"]["season"] == s and consensus(p)[0] in WRONG]
+    if not PH: return ""
+    head = '<h2 class="podh"><span>Τα λάθη της σεζόν</span></h2>'
+    if not ph:
+        return head + '<p class="note">Δεν υπάρχει ακόμα απόφαση που η πλειοψηφία των τηλεκριτικών να έκρινε λάθος.</p>'
+    ph = list(reversed(ph))  # newest first (PH is in chronological order)
+    full = sum(1 for p in ph if consensus(p)[0] == "Λάθος"); part = len(ph) - full
+    rows = []
+    for p in ph[:limit]:
+        m = p["m"]; bm = BYID.get(m["id"]); c, ok, bad = consensus(p)
+        rp = round_path(m); href = f'{rel(path, rp)}#{ph_anchor(p)}' if rp in ROUNDPATHS else rel(path, "tilekritiki/")
+        score = f' {bm["gh"]}–{bm["ga"]}' if bm else ""
+        pill = '<span class="er-v bad">Λάθος</span>' if c == "Λάθος" else '<span class="er-v part">Εν μέρει λάθος</span>'
+        rows.append(f'<a class="er" href="{href}"><span class="er-m">{esc(m["home"])}–{esc(m["away"])}{score} · {round_label(m)}</span>'
+                    f'<span class="er-p"><b>{esc(p["min"])}\'</b> {esc(p["cat"])} · {esc(p["dec"])}</span>'
+                    f'<span class="er-w">Ωφελήθηκε: <b>{esc(p["ben"])}</b> · τηλεκριτικοί {bad}–{ok}</span>{pill}</a>')
+    more = f' · <a href="{rel(path, "tilekritiki/")}">Όλες οι φάσεις</a>' if len(ph) > limit else ""
+    sumline = f'{len(ph)} λάθ{"ος" if len(ph) == 1 else "η"} κατά την πλειοψηφία των τηλεκριτικών' + (f' ({full} καθαρά, {part} εν μέρει)' if part else "")
+    return (f'{head}<p class="lead">{sumline}. <a href="{rel(path, "tilekritiki/isozygio/")}">Ποιος ευνοήθηκε, ποιος αδικήθηκε</a>{more}</p>'
+            f'<div class="ers">{"".join(rows)}</div>')
 def home_page(s, path):
     ms = season_ms(s)
     teams = sorted({t for m in ms for t in (m["home"], m["away"])})
     T = [dict(totals(ms, t), team=t) for t in teams]
     last = rounds_of(ms)[-1] if ms else None
     nvar = sum(len(m["var_items"]) for m in ms)
+    _pp = podiums(path, ms, T); _i = _pp.find('<h2 class="podh">')
+    _pod = (_pp[:_i], _pp[_i:]) if _i >= 0 else ("", _pp)  # season totals strip, then the records
     body = f"""<div class="headrow"><div><h1>Ισοζύγιο διαιτησίας Super League {s}</h1>
 <p class="lead">{len(ms)} αγώνες · {nvar} επεμβάσεις VAR που άλλαξαν απόφαση{f' · έως την <a href="{rel(path, round_path(last))}">{round_label(last)}</a>' if last else ''}.</p></div>{season_switch(path, s)}</div>
-{podiums(path, ms, T)}
+{_pod[0]}
+{season_errors(path, s)}
+{_pod[1]}
 <h2>Ισοζύγιο ανά ομάδα</h2>
 {board(path, T)}
 <p class="note">Το ισοζύγιο μετράει αποφάσεις, όχι λάθη. Μια ομάδα που επιτίθεται περισσότερο κερδίζει φυσιολογικά περισσότερα πέναλτι. Δες τη <a href="{rel(path, "methodologia/")}">μεθοδολογία</a>.</p>"""
@@ -921,15 +947,15 @@ def critic_page(c):
               ("Συμφωνία με πλειοψηφία", f"{round(100 * ag / len(agree))}%" if agree else "—", "")])
     body = f"""<p class="crumb"><a href="{rel(path, "tilekritiki/")}">Τηλεκριτική</a> / {esc(c["name"])}</p>
 <h1>{esc(c["name"])}: τι λέει για τη διαιτησία</h1>
-<p class="lead">{esc(c["kind"])}{" · " + esc(c["outlet"]) if c["outlet"] else ""}. Οι τοποθετήσεις του για τις αμφισβητούμενες φάσεις της Super League, με πηγή για καθεμία.</p>
+<p class="lead">{esc(c["kind"])}{" · " + esc(c["outlet"]) if c["outlet"] else ""}. Οι τοποθετήσεις {"της" if c.get("fem") else "του"} για τις αμφισβητούμενες φάσεις της Super League, με πηγή για καθεμία.</p>
 {k}
 <h2>Ποιον δικαιώνει</h2>
-<p class="lead">Σε κάθε φάση όπου διαμαρτυρήθηκε μια ομάδα: πόσες φορές ο {esc(c["name"])} έδωσε δίκιο στην ομάδα και πόσες στον διαιτητή.</p>
+<p class="lead">Σε κάθε φάση όπου διαμαρτυρήθηκε μια ομάδα: πόσες φορές {"η" if c.get("fem") else "ο"} {esc(c["name"])} έδωσε δίκιο στην ομάδα και πόσες στον διαιτητή.</p>
 {sides_table(c["name"])}
 <h2>Φάσεις</h2>
 {phase_details(path, list(reversed(mine)))}"""
     page(path, f'{c["name"]}: ανάλυση διαιτησίας Super League · refstats.gr',
-         f'Οι αναλύσεις του {c["name"]} για τις αμφισβητούμενες φάσεις της Super League: πότε συμφώνησε και πότε διαφώνησε με τον διαιτητή.', body, "0.6")
+         f'Οι αναλύσεις {"της" if c.get("fem") else "του"} {c["name"]} για τις αμφισβητούμενες φάσεις της Super League: πότε συμφώνησε και πότε διαφώνησε με τον διαιτητή.', body, "0.6")
 def ann_result(a):
     bm = BYID.get(a["m"]["id"])
     if not bm: return ""
@@ -1111,10 +1137,10 @@ if os.path.isdir(OUT):
     shutil.rmtree(OUT)
 os.makedirs(OUT)
 shutil.copytree(os.path.join(ROOT, "assets"), os.path.join(OUT, "assets"))
+ROUNDPATHS = {round_path(m) for m in MATCHES}
 home_page(CUR, "")
 for s in SEASONS[1:]:
     home_page(s, f"sezon/{s}/")
-ROUNDPATHS = {round_path(m) for m in MATCHES}
 for t in sorted({t for m in MATCHES for t in (m["home"], m["away"])}):
     team_page(t)
 refs_index()
