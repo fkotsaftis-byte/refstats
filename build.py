@@ -1309,4 +1309,8 @@ open(os.path.join(OUT, "sitemap.xml"), "w", encoding="utf-8").write(
     + "".join(f"<url><loc>{esc(SITE + '/' + p)}</loc><lastmod>{today}</lastmod><priority>{pr}</priority></url>\n" for p, pr in PAGES)
     + "</urlset>\n")
 if CFG.get("custom_domain"):
+    open(os.path.join(OUT, "CNAME"), "w").write(CFG["custom_domain"] + "\n")
+open(os.path.join(OUT, ".nojekyll"), "w").write("")
+for w in WARN: print("ΠΡΟΣΟΧΗ: " + w)
+print(f"OK: {len(MATCHES)} αγώνες, {sum(len(m['var_items']) for m in MATCHES)} φάσεις VAR, {len(PH)} αμφισβητούμενες φάσεις, {len(PAGES)} σελίδες -> {OUT}")
    
