@@ -278,3 +278,8 @@ table.sides small{display:block;font-size:11px;white-space:nowrap}
 .er-v{position:absolute;top:9px;right:10px;font-size:11px;font-weight:800;border-radius:4px;padding:1px 7px;color:#fff}
 .er-v.bad{background:var(--neg)}.er-v.part{background:#B8860B}
 .er:has(.er-v.part){border-left-color:#B8860B}
+/* σελίδα αγώνα */
+.matches.one{grid-template-columns:1fr;max-width:640px}
+table.mstat{max-width:520px}table.mstat td:not(.l),table.mstat th:not(.l){text-align:center;width:90px}
+.roundlinks2{line-height:2}
+.m .sc b a{color:inherit;text-decoration:none;border-bottom:1px dotted currentColor}
