@@ -283,3 +283,18 @@ table.sides small{display:block;font-size:11px;white-space:nowrap}
 table.mstat{max-width:520px}table.mstat td:not(.l),table.mstat th:not(.l){text-align:center;width:90px}
 .roundlinks2{line-height:2}
 .m .sc b a{color:inherit;text-decoration:none;border-bottom:1px dotted currentColor}
+/* ορισμοί */
+.oss{display:grid;gap:14px;grid-template-columns:repeat(auto-fill,minmax(420px,1fr));margin:10px 0 16px}
+@media (max-width:480px){.oss{grid-template-columns:1fr}}
+.os{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:14px}
+.os-t{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 10px}.os-t b{font-family:var(--display);font-size:22px}.os-t span{font-size:13px;color:var(--muted);margin-left:auto}
+.os-r{font-size:14.5px;margin:4px 0 10px}
+.os-k{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px}
+.os-k span{flex:1 1 80px;background:color-mix(in srgb,var(--bar) 6%,transparent);border-radius:6px;padding:6px 8px;font-size:11.5px;color:var(--muted);line-height:1.2}
+.os-k b{display:block;font-family:var(--display);font-size:20px;color:var(--ink)}
+table.os-h th{white-space:normal;line-height:1.2;font-size:10.5px}table.os-h td.few{color:var(--muted);font-size:12.5px;text-align:left}
+.os-teaser ul{list-style:none;padding:0;margin:6px 0;display:grid;gap:4px 18px;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));font-size:14.5px}
+.os-teaser{margin-bottom:18px}
+.oss{grid-template-columns:repeat(auto-fill,minmax(min(420px,100%),1fr))}
+.os{min-width:0}.os .tablewrap{overflow-x:auto}
+@media (max-width:480px){table.os-h td,table.os-h th{padding-left:6px;padding-right:6px}}
