@@ -267,3 +267,14 @@ table.sides small{display:block;font-size:11px;white-space:nowrap}
 .poll .pres{flex:1 0 100%;color:var(--muted);font-size:12.5px}
 .poll.done .pres{color:var(--ink)}
 .poll .pbar{height:6px;border-radius:3px;background:var(--bar);overflow:hidden;margin:2px 0 5px}.poll .pbar i{display:block;height:100%;background:var(--card)}
+/* αρχική: τα λάθη της σεζόν */
+.ers{display:grid;gap:8px;grid-template-columns:repeat(auto-fill,minmax(290px,1fr));margin:6px 0 26px}
+.er{position:relative;display:block;text-decoration:none;color:var(--ink);background:var(--surface);border:1px solid var(--line);border-left:4px solid var(--neg);border-radius:8px;padding:10px 12px 10px 12px}
+.er:hover{border-color:var(--ink)}
+.er span{display:block}
+.er-m{font-size:12.5px;color:var(--muted);padding-right:96px}
+.er-p{font-family:var(--display);font-size:18px;font-weight:600;margin:2px 0}.er-p b{font-weight:800}
+.er-w{font-size:13px;color:var(--muted)}.er-w b{color:var(--ink)}
+.er-v{position:absolute;top:9px;right:10px;font-size:11px;font-weight:800;border-radius:4px;padding:1px 7px;color:#fff}
+.er-v.bad{background:var(--neg)}.er-v.part{background:#B8860B}
+.er:has(.er-v.part){border-left-color:#B8860B}
