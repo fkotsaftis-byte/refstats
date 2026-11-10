@@ -282,6 +282,12 @@ def team_link(here, t): return f'<a href="{rel(here, "omades/" + TEAMS[t] + "/")
 def ref_link(here, p):
     if not p: return "—"
     return f'<a href="{rel(here, "diaitites/" + REFS[p]["slug"] + "/")}">{esc(p)}</a>'
+def match_path(m): return f"agonas/{m['season']}/{slugify(m['home'])}-{slugify(m['away'])}-{slugify(m['phase'])}-{m['round']}/"
+MATCHPATHS = set()
+def match_href(here, m, anchor=""):
+    mp = match_path(m)
+    if mp in MATCHPATHS: return rel(here, mp) + (f"#{anchor}" if anchor else "")
+    return rel(here, round_path(m)) + (f"#{anchor}" if anchor else "")
 def round_path(m): return f"agonistiki/{m['season']}/{slugify(m['phase'])}-{m['round']}/"
 def round_gen(m): return f"{m['round']}ης αγωνιστικής" + ("" if m["phase"] == "Κανονική" else f" ({m['phase']})")
 def round_label(m): return f"{m['round']}η αγωνιστική" + ("" if m["phase"] == "Κανονική" else f" ({m['phase']})")
@@ -332,6 +338,7 @@ def page(path, title, desc, body, priority="0.6", canonical=None):
     here = path
     nav = [("", "Ομάδες"), ("diaitites/", "Διαιτητές"), ("agonistiki/", "Αγωνιστικές")] + ([("tilekritiki/", "Τηλεκριτική")] if TK else []) + [("methodologia/", "Μεθοδολογία")]
     sec = path.split("/")[0] + "/" if path else ""
+    if sec == "agonas/": sec = "agonistiki/"
     navh = "".join(f'<a href="{rel(here, p)}"{" aria-current=\"page\"" if (p == sec or (p == "" and sec in ("", "sezon/"))) else ""}>{l}</a>' for p, l in nav)
     can = SITE + "/" + (canonical if canonical is not None else path)
     html = f"""<!doctype html>
@@ -483,7 +490,7 @@ def season_errors(path, s, limit=8):
     rows = []
     for p in ph[:limit]:
         m = p["m"]; bm = BYID.get(m["id"]); c, ok, bad = consensus(p)
-        rp = round_path(m); href = f'{rel(path, rp)}#{ph_anchor(p)}' if rp in ROUNDPATHS else rel(path, "tilekritiki/")
+        rp = round_path(m); href = match_href(path, m, ph_anchor(p)) if (match_path(m) in MATCHPATHS or rp in ROUNDPATHS) else rel(path, "tilekritiki/")
         score = f' {bm["gh"]}–{bm["ga"]}' if bm else ""
         pill = '<span class="er-v bad">Λάθος</span>' if c == "Λάθος" else '<span class="er-v part">Εν μέρει λάθος</span>'
         rows.append(f'<a class="er" href="{href}"><span class="er-m">{esc(m["home"])}–{esc(m["away"])}{score} · {round_label(m)}</span>'
@@ -521,7 +528,7 @@ def match_table(here, ms, team=None):
     rws = []
     for m in sorted(ms, key=lambda m: (m["season"], PHASE_ORDER.get(m["phase"], 9), m["round"]), reverse=True):
         rws.append(f'<tr><td><a href="{rel(here, round_path(m))}">{m["round"]}{"" if m["phase"] == "Κανονική" else "*"}</a></td><td>{fdate(m["date"])}</td>'
-                   f'<td class="l">{team_link(here, m["home"])} – {team_link(here, m["away"])}</td><td>{m["gh"]}–{m["ga"]}</td>'
+                   f'<td class="l">{team_link(here, m["home"])} – {team_link(here, m["away"])}</td><td><a href="{match_href(here, m)}">{m["gh"]}–{m["ga"]}</a></td>'
                    f'<td class="l">{ref_link(here, m["ref"])}</td><td>{m["pen_h"]}–{m["pen_a"]}</td>'
                    f'<td><i class="cy"></i>{m["yel_h"]}–{m["yel_a"]} <i class="cr"></i>{m["red_h"]}–{m["red_a"]}</td><td>{m["var_h"]}–{m["var_a"]}</td></tr>')
     return f'<div class="tablewrap"><table class="t">{h}{"".join(rws)}</table></div><p class="note">Στις στήλες με δύο νούμερα, πρώτα ο γηπεδούχος.</p>'
@@ -697,7 +704,7 @@ def match_card(here, m, detail=False):
     v = ""
     if detail:
         v = "".join(f'<div class="vx"><b>{esc(x["min"])}\'</b> {esc(x["type"])} · υπέρ {esc(x["ben"] or "—")}<span>{esc(x["desc"])}</span></div>' for x in m["var_items"])
-    return (f'<article class="m{" busy" if len(chips) >= 3 else ""}"><div class="sc"><span class="h">{team_link(here, m["home"])}</span><b>{m["gh"]}–{m["ga"]}</b><span class="a">{team_link(here, m["away"])}</span></div>'
+    return (f'<article class="m{" busy" if len(chips) >= 3 else ""}"><div class="sc"><span class="h">{team_link(here, m["home"])}</span><b>{f'<a href="{match_href(here, m)}">{m["gh"]}–{m["ga"]}</a>' if here != match_path(m) else f'{m["gh"]}–{m["ga"]}'}</b><span class="a">{team_link(here, m["away"])}</span></div>'
             f'<div class="ref">{fdate(m["date"])} · Διαιτητής: {ref_link(here, m["ref"])} · VAR: {ref_link(here, m["var"])} · {y} κίτριν{"η" if y == 1 else "ες"}</div>'
             + (f'<div class="chips2">{ch}</div>' if ch else '') + f'{v}</article>')
 
@@ -717,6 +724,49 @@ def round_page(s, first):
 <div class="pager">{prev}{nxt}</div>"""
     page(path, f"Διαιτησία {round_gen(first)} Super League {s} · refstats.gr",
          f"Οι διαιτητές της {round_gen(first)} της Super League {s}, τα πέναλτι, οι κάρτες και οι επεμβάσεις VAR αγώνα προς αγώνα.", body, "0.6")
+
+def match_page(m):
+    path = match_path(m)
+    rp = round_path(m)
+    ph = [p for p in PH if p["m"]["id"] == m["id"]]
+    an = [a for a in ANN if a["m"]["id"] == m["id"]]
+    H, A = m["home"], m["away"]
+    def row(lab, k):
+        return f'<tr><td class="l">{lab}</td><td>{m[k + "_h"]}</td><td>{m[k + "_a"]}</td></tr>'
+    stats = (f'<div class="tablewrap"><table class="t mstat"><tr><th class="l"></th><th>{esc(short(H))}</th><th>{esc(short(A))}</th></tr>'
+             + row("Πέναλτι", "pen") + row("Κίτρινες", "yel") + row("Κόκκινες", "red") + row("Φάουλ", "foul") + row("Ακυρωθέντα γκολ", "ann") + row("Επεμβάσεις VAR υπέρ", "var")
+             + '</table></div>')
+    rs = ref_stats([x for x in MATCHES if x["ref"] == m["ref"] and x["season"] == m["season"]]) if m["ref"] else None
+    art = "Η" if m["ref"].split()[0][-1:] in "αηάήωώ" else "Ο"  # Greek first names: Ελένη, Ανδρομάχη → η
+    refline = (f'<p class="note">{art} {ref_link(path, m["ref"])} στη σεζόν {esc(m["season"])}: {rs["n"]} αγώνες ως κύριος διαιτητής, '
+               f'{rs["ppm"]:.2f}'.replace(".", ",") + f' πέναλτι και {rs["ypm"]:.1f}'.replace(".", ",") + ' κίτρινες ανά αγώνα.</p>') if rs and rs["n"] else ""
+    others = [x for x in MATCHES if x["season"] == m["season"] and x["phase"] == m["phase"] and x["round"] == m["round"] and x["id"] != m["id"]]
+    ol = " · ".join(f'<a href="{match_href(path, x)}">{esc(x["home"])}–{esc(x["away"])} {x["gh"]}–{x["ga"]}</a>' for x in others)
+    w = sum(1 for p in ph if consensus(p)[0] in WRONG)
+    phs = (f'<h2>Αμφισβητούμενες φάσεις: τι είπαν οι τηλεκριτικοί</h2>{phase_cards(path, ph, newest_first=False, show_head=False)}') if ph else ""
+    anl = ann_block(path, an, show_match=False)
+    ld = json.dumps({"@context": "https://schema.org", "@type": "SportsEvent", "name": f"{H} – {A}", "sport": "Football",
+                     "startDate": m["date"].strftime("%Y-%m-%d") if m["date"] else None,
+                     "homeTeam": {"@type": "SportsTeam", "name": H}, "awayTeam": {"@type": "SportsTeam", "name": A},
+                     "superEvent": {"@type": "SportsEvent", "name": f"Super League {m['season']}"}}, ensure_ascii=False)
+    body = f"""<p class="crumb"><a href="{rel(path, "agonistiki/")}">Αγωνιστικές</a> / <a href="{rel(path, rp)}">{round_label(m)} {esc(m["season"])}</a> / {esc(H)}–{esc(A)}</p>
+<h1>{esc(H)}–{esc(A)} {m["gh"]}–{m["ga"]}: η διαιτησία του αγώνα</h1>
+<p class="lead">{round_label(m).capitalize()} Super League {esc(m["season"])} · {fdate(m["date"])} · Διαιτητής: {ref_link(path, m["ref"])}{" · VAR: " + ref_link(path, m["var"]) if m["var"] else ""}{f" · {len(ph)} αμφισβητούμεν{'η' if len(ph) == 1 else 'ες'} φάσ{'η' if len(ph) == 1 else 'εις'}" if ph else ""}.</p>
+<div class="matches one">{match_card(path, m, detail=True)}</div>
+<h2>Τα νούμερα του αγώνα</h2>
+{stats}
+{refline}
+{phs}
+{anl}
+{f'<h2>Οι άλλοι αγώνες της {round_gen(m)}</h2><p class="roundlinks2">{ol}</p>' if ol else ""}
+<script type="application/ld+json">{ld}</script>"""
+    pens = m["pen_h"] + m["pen_a"]; reds = m["red_h"] + m["red_a"]
+    desc = (f"Η διαιτησία στο {H}–{A} {m['gh']}–{m['ga']} ({round_label(m)}, Super League {m['season']}): διαιτητής {m['ref'] or '—'}"
+            + (f", VAR {m['var']}" if m["var"] else "") + f", {pens} πέναλτι, {reds} κόκκιν{'η' if reds == 1 else 'ες'}"
+            + (f", {len(ph)} αμφισβητούμενες φάσεις και τι είπαν οι τηλεκριτικοί" if ph else "") + ".")
+    title = (f"{H}–{A} {m['gh']}–{m['ga']}: διαιτησία" + (", φάσεις και τηλεκριτική" if ph else ", πέναλτι και VAR")
+             + f" ({round_label(m)} {m['season']}) · refstats.gr")
+    page(path, title, desc, body, "0.7" if ph else "0.5")
 
 def round_ph(path, ms):
     ids = {m["id"] for m in ms}
@@ -747,7 +797,7 @@ def ph_anchor(p): return "f-" + slugify(p["code"])
 def ph_where(here, p):
     m = p["m"]; rp = round_path(m)
     label = f'{esc(m["home"])}–{esc(m["away"])} {esc(p["min"])}\''
-    return f'<a href="{rel(here, rp)}#{ph_anchor(p)}">{label}</a>' if rp in ROUNDPATHS else label
+    return f'<a href="{match_href(here, m, ph_anchor(p))}">{label}</a>' if (rp in ROUNDPATHS or match_path(m) in MATCHPATHS) else label
 def cons_cell(p):
     c, ok, bad = consensus(p)
     if not c: return '<td class="cons nil">—</td>'
@@ -802,7 +852,7 @@ def phase_card(here, p):
 def is_hot(mid):
     ps = [p for p in PH if p["m"]["id"] == mid]
     return len(ps) >= 3 or sum(len(p["ops"]) for p in ps) >= 10
-def phase_cards(here, phases, newest_first=True, head="h3", howto=True):
+def phase_cards(here, phases, newest_first=True, head="h3", howto=True, show_head=True):
     groups, seen = {}, []
     for p in phases:
         mid = p["m"]["id"]
@@ -817,12 +867,13 @@ def phase_cards(here, phases, newest_first=True, head="h3", howto=True):
         score = f' {bm["gh"]}–{bm["ga"]}' if bm else ""
         rp = round_path(m)
         title = f'{esc(m["home"])}–{esc(m["away"])}{score}'
-        if rp in ROUNDPATHS and here != rp: title = f'<a href="{rel(here, rp)}">{title}</a>'
+        if here != match_path(m) and (match_path(m) in MATCHPATHS or rp in ROUNDPATHS): title = f'<a href="{match_href(here, m)}">{title}</a>'
         if is_hot(mid): title += ' <span class="hot" title="Από τα πιο πολυσυζητημένα: τουλάχιστον 3 αμφισβητούμενες φάσεις ή 10 γνώμες σχολιαστών">HOT</span>'
         sub = f'{round_label(m)} · Διαιτητής: {ref_link(here, m["ref"])}' if m.get("ref") else round_label(m)
         an = [a for a in ANN if a["m"]["id"] == mid]
         anl = ('<p class="an-flag">Επίσημη ανακοίνωση: ' + ", ".join(f'<a href="{rel(here, "tilekritiki/anakoinoseis/")}">{esc(a["team"])}</a>' for a in an) + '</p>') if an else ""
-        out.append(f'<section class="pm"><{head}>{title}</{head}><p class="note">{sub}</p>{anl}<div class="pcs">{"".join(phase_card(here, p) for p in ps)}</div></section>')
+        hd = f'<{head}>{title}</{head}><p class="note">{sub}</p>{anl}' if show_head else ""
+        out.append(f'<section class="pm">{hd}<div class="pcs">{"".join(phase_card(here, p) for p in ps)}</div></section>')
     return "".join(out) + (HOWTO if howto else "")
 HOWTO = ('<details class="howto"><summary>Πώς διαβάζεται</summary><p>Σε κάθε φάση φαίνεται ποια ομάδα διαμαρτυρήθηκε και τι αποφάσισε ο διαιτητής. '
          'Κάθε σχολιαστής πηγαίνει είτε με τον <b>διαιτητή</b> (έκρινε την απόφαση σωστή) είτε με την <b>ομάδα</b> που διαμαρτυρήθηκε (την έκρινε λάθος) ή «εν μέρει» με την ομάδα, όταν ο διαιτητής έκανε λάθος αλλά μικρότερο από όσο καταγγέλλει η ομάδα. '
@@ -1138,6 +1189,7 @@ if os.path.isdir(OUT):
 os.makedirs(OUT)
 shutil.copytree(os.path.join(ROOT, "assets"), os.path.join(OUT, "assets"))
 ROUNDPATHS = {round_path(m) for m in MATCHES}
+MATCHPATHS.update(match_path(m) for m in MATCHES)
 home_page(CUR, "")
 for s in SEASONS[1:]:
     home_page(s, f"sezon/{s}/")
@@ -1150,6 +1202,8 @@ for s in SEASONS:
     for first in rounds_of(season_ms(s)):
         round_page(s, first)
 rounds_index()
+for m in MATCHES:
+    match_page(m)
 if TK:
     tilekritiki_index()
 if PH:
