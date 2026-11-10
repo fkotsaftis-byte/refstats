@@ -818,6 +818,11 @@ def with_ref(ref, team):
         pf += m["pen_h"] if h else m["pen_a"]; pa += m["pen_a"] if h else m["pen_h"]
         rf += m["red_a"] if h else m["red_h"]; ra += m["red_h"] if h else m["red_a"]
     return {"n": len(ms), "w": w, "d": d, "l": l, "pf": pf, "pa": pa, "rf": rf, "ra": ra}
+def acc_surname(name, fem=False):
+    """Accusative of the surname: Φωτιάς→Φωτιά, Τσακαλίδης→Τσακαλίδη, Παπαδόπουλος→Παπαδόπουλο.
+    Female surnames (Αντωνίου) and foreign ones without final -ς (Γιαμπλόνσκι) stay as they are."""
+    sn = name.split()[-1]
+    return sn[:-1] if not fem and sn.endswith("ς") else sn
 def is_fem(name): return bool(name) and name.split()[0][-1:] in "αηάήωώ"  # Ελένη, Ανδρομάχη, Ζωή
 def orismos_card(here, m):
     ref, var = m["ref"], m.get("var", "")
@@ -838,7 +843,7 @@ def orismos_card(here, m):
             hist.append(f'<tr><td class="l">{tlink(here, t)}</td><td>{r["n"]}</td><td>{r["w"]}-{r["d"]}-{r["l"]}</td><td>{r["pf"]}–{r["pa"]}</td><td>{r["rf"]}–{r["ra"]}</td></tr>')
         else:
             hist.append(f'<tr><td class="l">{tlink(here, t)}</td><td colspan="4" class="few">πρώτη φορά μαζί {tou} στα δεδομένα μας</td></tr>')
-    ht = ('<div class="tablewrap"><table class="t os-h"><tr><th class="l">Με ' + ("την " if fem else "τον ") + esc(ref.split()[-1]) + '</th><th>Αγ.</th><th>Ν-Ι-Η</th><th>Πέναλτι υπέρ–κατά</th><th>Κόκκινες υπέρ–κατά</th></tr>'
+    ht = ('<div class="tablewrap"><table class="t os-h"><tr><th class="l">Με ' + ("την " if fem else "τον ") + esc(acc_surname(ref, fem)) + '</th><th>Αγ.</th><th>Ν-Ι-Η</th><th>Πέναλτι υπέρ–κατά</th><th>Κόκκινες υπέρ–κατά</th></tr>'
           + "".join(hist) + '</table></div>')
     wl = f'<p class="note">Στους αγώνες {tou}, η πλειοψηφία των τηλεκριτικών έχει κρίνει λάθος <b>{len(wrong)}</b> απόφασ{"η" if len(wrong) == 1 else "εις"}.</p>' if PH and allm["n"] else ""
     when = fdate(m["date"]) + (f' · {esc(m.get("time", ""))}' if m.get("time") else "")
@@ -1304,7 +1309,4 @@ open(os.path.join(OUT, "sitemap.xml"), "w", encoding="utf-8").write(
     + "".join(f"<url><loc>{esc(SITE + '/' + p)}</loc><lastmod>{today}</lastmod><priority>{pr}</priority></url>\n" for p, pr in PAGES)
     + "</urlset>\n")
 if CFG.get("custom_domain"):
-    open(os.path.join(OUT, "CNAME"), "w").write(CFG["custom_domain"] + "\n")
-open(os.path.join(OUT, ".nojekyll"), "w").write("")
-for w in WARN: print("ΠΡΟΣΟΧΗ: " + w)
-print(f"OK: {len(MATCHES)} αγώνες, {sum(len(m['var_items']) for m in MATCHES)} φάσεις VAR, {len(PH)} αμφισβητούμενες φάσεις, {len(PAGES)} σελίδες -> {OUT}")
+   
