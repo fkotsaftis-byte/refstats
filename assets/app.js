@@ -31,7 +31,7 @@
   }
   // sortable tables
   document.querySelectorAll("table.sortable").forEach(function (t) {
-    var ths = t.querySelectorAll("thead th"), dir = {};
+    var hr = t.tHead.rows[t.tHead.rows.length - 1], ths = hr.querySelectorAll("th"), dir = {};
     ths.forEach(function (th, i) {
       th.tabIndex = 0;
       var go = function () {
