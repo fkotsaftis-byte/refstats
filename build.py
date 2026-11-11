@@ -601,31 +601,41 @@ def ref_stats(lst):
 def refs_index():
     path = "diaitites/"
     ms = season_ms(CUR)
-    by = defaultdict(list); byvar = defaultdict(int)
+    by = defaultdict(list); byvar = defaultdict(list)
     for m in ms:
         if m["ref"]: by[m["ref"]].append(m)
-        if m["var"]: byvar[m["var"]] += 1
+        if m["var"]: byvar[m["var"]].append(m)
     lg = ref_stats(ms)
-    rows_ = sorted(((p, ref_stats(l)) for p, l in by.items()), key=lambda x: (-x[1]["n"], x[0]))
     errs = defaultdict(float)  # decisions judged wrong by the τηλεκριτικοί in his matches as main referee (εν μέρει = ½)
     for ph_ in PH:
         if ph_["m"]["season"] == CUR and ph_["m"].get("ref"):
             c = consensus(ph_)[0]
             if c in WRONG: errs[ph_["m"]["ref"]] += WEIGHT[c]
-    tr = "".join(f'<tr><td class="l">{ref_link(path, p)}{" <span class=\"pill\">" + esc(REFS[p]["assoc"]) + "</span>" if REFS[p]["foreign"] else ""}</td>'
-                 f'<td data-v="{s["n"]}">{s["n"]}</td><td data-v="{byvar.get(p, 0)}">{byvar.get(p, 0)}</td>'
-                 f'<td data-v="{errs.get(p, 0)}">{nf(errs.get(p, 0)) if PH else "—"}</td><td data-v="{s["var"]}">{s["var"]}</td>'
-                 f'<td data-v="{s["ppm"]:.3f}">{s["ppm"]:.2f}</td><td data-v="{s["ypm"]:.3f}">{s["ypm"]:.2f}</td><td data-v="{s["red"]}">{s["red"]}</td></tr>'
-                 for p, s in rows_)
-    vonly = sorted(p for p in byvar if p not in by)
-    vo = f'<p class="note">Μόνο ως VAR: {", ".join(ref_link(path, p) for p in vonly)}.</p>' if vonly else ""
+    people = set(by) | set(byvar)
+    rows_ = sorted(people, key=lambda p: (-len(by.get(p, [])), -len(byvar.get(p, [])), p))
+    tr = ""
+    for p in rows_:
+        s_ = ref_stats(by.get(p, []))
+        vn = len(byvar.get(p, [])); vi = sum(len(m["var_items"]) for m in byvar.get(p, []))
+        flag = f' <span class="pill">{esc(REFS[p]["assoc"])}</span>' if REFS.get(p, {}).get("foreign") else ""
+        if s_["n"]:
+            rc = (f'<td data-v="{s_["n"]}">{s_["n"]}</td><td data-v="{errs.get(p, 0)}">{nf(errs.get(p, 0)) if PH else "—"}</td><td data-v="{s_["var"]}">{s_["var"]}</td>'
+                  f'<td data-v="{s_["ppm"]:.3f}">{s_["ppm"]:.2f}</td><td data-v="{s_["ypm"]:.3f}">{s_["ypm"]:.2f}</td><td data-v="{s_["red"]}">{s_["red"]}</td>')
+        else:
+            rc = '<td data-v="0">0</td>' + '<td data-v="-1" class="nil">—</td>' * 5
+        vc = (f'<td class="vr" data-v="{vn}">{vn}</td><td class="vr" data-v="{vi}">{vi}</td>' if vn
+              else '<td class="vr" data-v="0">0</td><td class="vr nil" data-v="-1">—</td>')
+        tr += f'<tr><td class="l">{ref_link(path, p)}{flag}</td>{rc}{vc}</tr>'
     body = f"""<h1>Διαιτητές Super League {CUR}</h1>
 <p class="lead">Μέσος όρος πρωταθλήματος: {lg["ppm"]:.2f} πέναλτι και {lg["ypm"]:.2f} κίτρινες ανά αγώνα. Πάτησε μια στήλη για ταξινόμηση.</p>
-<div class="tablewrap"><table class="t sortable"><thead><tr><th class="l">Διαιτητής</th><th>Αγώνες</th><th>Ως VAR</th><th>Λάθη</th><th>Επεμβ. VAR</th><th>Πέναλτι/αγ.</th><th>Κίτρινες/αγ.</th><th>Κόκκινες</th></tr></thead><tbody>{tr}</tbody></table></div>
-<p class="note">Λάθη: αποφάσεις σε αγώνες που σφύριξε ως κύριος διαιτητής και που η πλειοψηφία των τηλεκριτικών έκρινε λάθος (μια «εν μέρει λάθος» μετράει μισή). Μετράνε μόνο οι <a href="{rel(path, "tilekritiki/")}">αμφισβητούμενες φάσεις</a> που καταγράφουμε. Επεμβ. VAR: αποφάσεις του που άλλαξαν μετά από VAR.</p>
-{vo}"""
+<div class="tablewrap"><table class="t sortable refs"><thead>
+<tr class="grp"><th></th><th colspan="6">Ως διαιτητής</th><th colspan="2" class="vr">Ως VAR</th></tr>
+<tr><th class="l">Διαιτητής</th><th>Αγώνες</th><th>Λάθη</th><th>Επεμβ. VAR</th><th>Πέναλτι/αγ.</th><th>Κίτρινες/αγ.</th><th>Κόκκινες</th><th class="vr">Αγώνες</th><th class="vr">Επεμβ.</th></tr>
+</thead><tbody>{tr}</tbody></table></div>
+<p class="note"><b>Ως διαιτητής</b>, στους αγώνες που σφύριξε στο γήπεδο. Λάθη: αποφάσεις που η πλειοψηφία των τηλεκριτικών έκρινε λάθος (μια «εν μέρει λάθος» μετράει μισή)· μετράνε μόνο οι <a href="{rel(path, "tilekritiki/")}">αμφισβητούμενες φάσεις</a> που καταγράφουμε. Επεμβ. VAR: αποφάσεις του που άλλαξαν μετά από επέμβαση του VAR.<br>
+<b>Ως VAR</b>, στους αγώνες όπου ήταν στο δωμάτιο του VAR. Επεμβ. ως VAR: πόσες φορές η επέμβασή του άλλαξε την απόφαση του διαιτητή.</p>"""
     page(path, f"Διαιτητές Super League {CUR}: πέναλτι, κάρτες, VAR · refstats.gr",
-         f"Στατιστικά κάθε διαιτητή της Super League {CUR}: αγώνες, λάθη κατά τους τηλεκριτικούς, επεμβάσεις VAR, πέναλτι και κάρτες ανά αγώνα.", body, "0.9")
+         f"Στατιστικά κάθε διαιτητή της Super League {CUR}: αγώνες, λάθη κατά τους τηλεκριτικούς, επεμβάσεις VAR, πέναλτι και κάρτες ανά αγώνα, και τα στατιστικά του ως VAR.", body, "0.9")
 
 def ref_ph(path, ref):
     ph = [x for x in PH if x["m"]["ref"] == ref]
