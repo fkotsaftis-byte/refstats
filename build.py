@@ -607,18 +607,25 @@ def refs_index():
         if m["var"]: byvar[m["var"]] += 1
     lg = ref_stats(ms)
     rows_ = sorted(((p, ref_stats(l)) for p, l in by.items()), key=lambda x: (-x[1]["n"], x[0]))
+    errs = defaultdict(float)  # decisions judged wrong by the τηλεκριτικοί in his matches as main referee (εν μέρει = ½)
+    for ph_ in PH:
+        if ph_["m"]["season"] == CUR and ph_["m"].get("ref"):
+            c = consensus(ph_)[0]
+            if c in WRONG: errs[ph_["m"]["ref"]] += WEIGHT[c]
     tr = "".join(f'<tr><td class="l">{ref_link(path, p)}{" <span class=\"pill\">" + esc(REFS[p]["assoc"]) + "</span>" if REFS[p]["foreign"] else ""}</td>'
-                 f'<td data-v="{s["n"]}">{s["n"]}</td><td data-v="{byvar.get(p, 0)}">{byvar.get(p, 0)}</td><td data-v="{s["ppm"]:.3f}">{s["ppm"]:.2f}</td>'
-                 f'<td data-v="{s["ypm"]:.3f}">{s["ypm"]:.2f}</td><td data-v="{s["red"]}">{s["red"]}</td><td data-v="{s["var"]}">{s["var"]}</td><td data-v="{s["hwp"]:.3f}">{round(s["hwp"] * 100)}%</td></tr>'
+                 f'<td data-v="{s["n"]}">{s["n"]}</td><td data-v="{byvar.get(p, 0)}">{byvar.get(p, 0)}</td>'
+                 f'<td data-v="{errs.get(p, 0)}">{nf(errs.get(p, 0)) if PH else "—"}</td><td data-v="{s["var"]}">{s["var"]}</td>'
+                 f'<td data-v="{s["ppm"]:.3f}">{s["ppm"]:.2f}</td><td data-v="{s["ypm"]:.3f}">{s["ypm"]:.2f}</td><td data-v="{s["red"]}">{s["red"]}</td></tr>'
                  for p, s in rows_)
     vonly = sorted(p for p in byvar if p not in by)
     vo = f'<p class="note">Μόνο ως VAR: {", ".join(ref_link(path, p) for p in vonly)}.</p>' if vonly else ""
     body = f"""<h1>Διαιτητές Super League {CUR}</h1>
-<p class="lead">Μέσος όρος πρωταθλήματος: {lg["ppm"]:.2f} πέναλτι και {lg["ypm"]:.2f} κίτρινες ανά αγώνα, νίκη γηπεδούχου στο {round(lg["hwp"] * 100)}%. Πάτησε μια στήλη για ταξινόμηση.</p>
-<div class="tablewrap"><table class="t sortable"><thead><tr><th class="l">Διαιτητής</th><th>Αγώνες</th><th>Ως VAR</th><th>Πέναλτι/αγ.</th><th>Κίτρινες/αγ.</th><th>Κόκκινες</th><th>Επεμβ. VAR</th><th>Νίκες γηπ.</th></tr></thead><tbody>{tr}</tbody></table></div>
+<p class="lead">Μέσος όρος πρωταθλήματος: {lg["ppm"]:.2f} πέναλτι και {lg["ypm"]:.2f} κίτρινες ανά αγώνα. Πάτησε μια στήλη για ταξινόμηση.</p>
+<div class="tablewrap"><table class="t sortable"><thead><tr><th class="l">Διαιτητής</th><th>Αγώνες</th><th>Ως VAR</th><th>Λάθη</th><th>Επεμβ. VAR</th><th>Πέναλτι/αγ.</th><th>Κίτρινες/αγ.</th><th>Κόκκινες</th></tr></thead><tbody>{tr}</tbody></table></div>
+<p class="note">Λάθη: αποφάσεις σε αγώνες που σφύριξε ως κύριος διαιτητής και που η πλειοψηφία των τηλεκριτικών έκρινε λάθος (μια «εν μέρει λάθος» μετράει μισή). Μετράνε μόνο οι <a href="{rel(path, "tilekritiki/")}">αμφισβητούμενες φάσεις</a> που καταγράφουμε. Επεμβ. VAR: αποφάσεις του που άλλαξαν μετά από VAR.</p>
 {vo}"""
     page(path, f"Διαιτητές Super League {CUR}: πέναλτι, κάρτες, VAR · refstats.gr",
-         f"Στατιστικά κάθε διαιτητή της Super League {CUR}: αγώνες, πέναλτι και κάρτες ανά αγώνα, επεμβάσεις VAR, νίκες γηπεδούχου.", body, "0.9")
+         f"Στατιστικά κάθε διαιτητή της Super League {CUR}: αγώνες, λάθη κατά τους τηλεκριτικούς, επεμβάσεις VAR, πέναλτι και κάρτες ανά αγώνα.", body, "0.9")
 
 def ref_ph(path, ref):
     ph = [x for x in PH if x["m"]["ref"] == ref]
@@ -1313,4 +1320,3 @@ if CFG.get("custom_domain"):
 open(os.path.join(OUT, ".nojekyll"), "w").write("")
 for w in WARN: print("ΠΡΟΣΟΧΗ: " + w)
 print(f"OK: {len(MATCHES)} αγώνες, {sum(len(m['var_items']) for m in MATCHES)} φάσεις VAR, {len(PH)} αμφισβητούμενες φάσεις, {len(PAGES)} σελίδες -> {OUT}")
-   
