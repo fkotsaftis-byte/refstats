@@ -298,3 +298,15 @@ table.os-h th{white-space:normal;line-height:1.2;font-size:10.5px}table.os-h td.
 .oss{grid-template-columns:repeat(auto-fill,minmax(min(420px,100%),1fr))}
 .os{min-width:0}.os .tablewrap{overflow-x:auto}
 @media (max-width:480px){table.os-h td,table.os-h th{padding-left:6px;padding-right:6px}}
+/* διαιτητές: ως διαιτητής / ως VAR */
+table.refs tr.grp th{text-align:center;font-size:10.5px;border-bottom:2px solid var(--line);color:var(--muted)}
+table.refs .vr{background:color-mix(in srgb,#3B6FB6 9%,transparent)}
+table.refs tr.grp th.vr{color:#3B6FB6;border-bottom-color:#3B6FB6}
+table.refs td.nil{color:var(--line)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) table.refs .vr{background:color-mix(in srgb,#7FA6E0 12%,transparent)}:root:not([data-theme="light"]) table.refs tr.grp th.vr{color:#7FA6E0}}
+table.refs td,table.refs th{padding-left:8px;padding-right:8px}
+table.refs th{white-space:normal;line-height:1.2;vertical-align:bottom}
+table.refs td.l{white-space:normal;min-width:170px}
+table.refs .pill{font-size:9.5px;padding:0 5px}
+table.refs th:first-child,table.refs td:first-child{position:sticky;left:0;background:var(--surface);z-index:1;box-shadow:1px 0 0 var(--line)}
+@media (max-width:480px){table.refs td.l{min-width:130px}}
