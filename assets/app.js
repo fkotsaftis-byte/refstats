@@ -88,3 +88,10 @@
     });
   });
 })();
+/* email επικοινωνίας: συναρμολογείται εδώ για να μην το βρίσκουν τα bots */
+(function () {
+  document.querySelectorAll("a.em").forEach(function (a) {
+    var e = a.getAttribute("data-u") + "@" + a.getAttribute("data-d");
+    a.href = "mailto:" + e; a.textContent = e;
+  });
+})();
