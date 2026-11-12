@@ -335,6 +335,7 @@ b.addEventListener("click",function(e){var v=e.target.getAttribute("data-c");if(
 var l=document.getElementById("ckset");if(l)l.addEventListener("click",function(e){e.preventDefault();try{localStorage.removeItem("rs_consent")}catch(x){}b.hidden=false;});})();</script>""" % GA4
 
 CONTACT = (CFG.get("contact_email") or "info@refstats.gr").strip()
+SOCIAL = [(k, v) for k, v in (("Instagram", CFG.get("instagram") or "https://www.instagram.com/refstats.gr/"), ("X", CFG.get("x") or "")) if v]
 def mail_link():
     """Address assembled by app.js, so it is not in the HTML in plain form (fewer spam bots)."""
     u, d = CONTACT.split("@")
@@ -374,7 +375,7 @@ def page(path, title, desc, body, priority="0.6", canonical=None):
 </main>
 <footer>
   <p>refstats.gr · Ανεξάρτητη καταγραφή στατιστικών διαιτησίας της Super League. Δεν σχετίζεται με την ΕΠΟ, την ΚΕΔ ή τη Super League.</p>
-  <p>Τελευταία ενημέρωση: {UPDATED} · <a href="{rel(here, "methodologia/")}">Μεθοδολογία</a> · <a href="{rel(here, "aporrito/")}">Πολιτική απορρήτου</a>{' · <a href="#" id="ckset">Ρυθμίσεις cookies</a>' if GA4 else ""} · Επικοινωνία: {mail_link()}</p>
+  <p>Τελευταία ενημέρωση: {UPDATED} · <a href="{rel(here, "methodologia/")}">Μεθοδολογία</a> · <a href="{rel(here, "aporrito/")}">Πολιτική απορρήτου</a>{' · <a href="#" id="ckset">Ρυθμίσεις cookies</a>' if GA4 else ""} · Επικοινωνία: {mail_link()}{"".join(f' · <a href="{esc(u)}" rel="me noopener" target="_blank">{k}</a>' for k, u in SOCIAL)}</p>
 </footer>
 </div>
 <script src="{"../" * here.count("/")}assets/app.js" defer></script>
@@ -523,7 +524,7 @@ def home_page(s, path):
 {_pod[1]}
 <h2>Ισοζύγιο ανά ομάδα</h2>
 {board(path, T)}
-<p class="note">Το ισοζύγιο μετράει αποφάσεις, όχι λάθη. Μια ομάδα που επιτίθεται περισσότερο κερδίζει φυσιολογικά περισσότερα πέναλτι. Δες τη <a href="{rel(path, "methodologia/")}">μεθοδολογία</a>.</p>"""
+<p class="note">Το ισοζύγιο μετράει αποφάσεις, όχι λάθη. Μια ομάδα που επιτίθεται περισσότερο κερδίζει φυσιολογικά περισσότερα πέναλτι. Δες τη <a href="{rel(path, "methodologia/")}">μεθοδολογία</a>.</p>{'<script type="application/ld+json">' + json.dumps({"@context": "https://schema.org", "@type": "WebSite", "name": "refstats.gr", "url": SITE + "/", "inLanguage": "el", "description": "Στατιστικά διαιτησίας Super League: πέναλτι, κάρτες, VAR και τηλεκριτική.", "publisher": {"@type": "Organization", "name": "refstats.gr", "url": SITE + "/", "email": CONTACT, "sameAs": [u for _, u in SOCIAL]}}, ensure_ascii=False) + '</script>' if path == "" else ""}"""
     title = f"Στατιστικά διαιτησίας Super League {s} · refstats.gr" if path == "" else f"Ισοζύγιο διαιτησίας Super League {s} · refstats.gr"
     desc = f"Πέναλτι, κάρτες και επεμβάσεις VAR υπέρ και κατά κάθε ομάδας της Super League {s}, αγώνα προς αγώνα."
     page(path, title, desc, body, "1.0" if path == "" else "0.7")
