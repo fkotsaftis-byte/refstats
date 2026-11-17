@@ -101,8 +101,16 @@ for r in rows("diaitites"):
 PAIRS = [("pen", "Πέναλτι"), ("yel", "Κίτρινες"), ("red", "Κόκκινες"), ("foul", "Φάουλ"), ("ann", "Ακυρ. γκολ")]
 MATCHES = []
 ALLM = {}
+# Seasons still being filled in: kept off the site until they are removed from "hidden_seasons" in config.json,
+# so that a past season appears all at once and not match by match.
+HIDDEN = {str(x).strip() for x in CFG.get("hidden_seasons", [])}
+PROGRESS = {}
 for r in rows("agones"):
     if not (r.get("ID") and r.get("Γηπεδούχος") and r.get("Φιλοξενούμενος")):
+        continue
+    if r.get("Σεζόν") in HIDDEN:
+        done = all((r.get(c) or "").strip() for c in ("Πέναλτι Γηπ", "Πέναλτι Φιλ", "Κίτρινες Γηπ", "Κίτρινες Φιλ"))
+        d, n = PROGRESS.get(r["Σεζόν"], (0, 0)); PROGRESS[r["Σεζόν"]] = (d + done, n + 1)
         continue
     ALLM[r["ID"]] = {"id": r["ID"], "season": r["Σεζόν"], "phase": r.get("Φάση") or "Κανονική", "round": num(r["Αγωνιστική"]),
                      "date": pdate(r.get("Ημερομηνία", "")), "home": r["Γηπεδούχος"], "away": r["Φιλοξενούμενος"], "ref": r.get("Διαιτητής", ""), "var": r.get("VAR", "")}
@@ -1338,4 +1346,5 @@ if CFG.get("custom_domain"):
     open(os.path.join(OUT, "CNAME"), "w").write(CFG["custom_domain"] + "\n")
 open(os.path.join(OUT, ".nojekyll"), "w").write("")
 for w in WARN: print("ΠΡΟΣΟΧΗ: " + w)
+for s_, (d, n) in sorted(PROGRESS.items()): print(f"ΚΡΥΦΗ ΣΕΖΟΝ {s_}: {d} από {n} αγώνες συμπληρωμένοι ({round(100 * d / n) if n else 0}%) — δεν εμφανίζεται στο site")
 print(f"OK: {len(MATCHES)} αγώνες, {sum(len(m['var_items']) for m in MATCHES)} φάσεις VAR, {len(PH)} αμφισβητούμενες φάσεις, {len(PAGES)} σελίδες -> {OUT}")
