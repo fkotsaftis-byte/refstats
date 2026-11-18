@@ -779,10 +779,12 @@ def match_page(m):
     w = sum(1 for p in ph if consensus(p)[0] in WRONG)
     phs = (f'<h2>Αμφισβητούμενες φάσεις: τι είπαν οι τηλεκριτικοί</h2>{phase_cards(path, ph, newest_first=False, show_head=False)}') if ph else ""
     anl = ann_block(path, an, show_match=False)
-    ld = json.dumps({"@context": "https://schema.org", "@type": "SportsEvent", "name": f"{H} – {A}", "sport": "Football",
-                     "startDate": m["date"].strftime("%Y-%m-%d") if m["date"] else None,
-                     "homeTeam": {"@type": "SportsTeam", "name": H}, "awayTeam": {"@type": "SportsTeam", "name": A},
-                     "superEvent": {"@type": "SportsEvent", "name": f"Super League {m['season']}"}}, ensure_ascii=False)
+    # Breadcrumbs only: these are analysis pages about past matches, not event listings,
+    # so Event/SportsEvent markup would be judged against Google's event (ticketing) requirements.
+    ld = json.dumps({"@context": "https://schema.org", "@type": "BreadcrumbList", "itemListElement": [
+        {"@type": "ListItem", "position": 1, "name": "Αγωνιστικές", "item": SITE + "/agonistiki/"},
+        {"@type": "ListItem", "position": 2, "name": f"{round_label(m).capitalize()} {m['season']}", "item": SITE + "/" + rp},
+        {"@type": "ListItem", "position": 3, "name": f"{H}–{A}", "item": SITE + "/" + path}]}, ensure_ascii=False)
     body = f"""<p class="crumb"><a href="{rel(path, "agonistiki/")}">Αγωνιστικές</a> / <a href="{rel(path, rp)}">{round_label(m)} {esc(m["season"])}</a> / {esc(H)}–{esc(A)}</p>
 <h1>{esc(H)}–{esc(A)} {m["gh"]}–{m["ga"]}: η διαιτησία του αγώνα</h1>
 <p class="lead">{round_label(m).capitalize()} Super League {esc(m["season"])} · {fdate(m["date"])} · Διαιτητής: {ref_link(path, m["ref"])}{" · VAR: " + ref_link(path, m["var"]) if m["var"] else ""}{f" · {len(ph)} αμφισβητούμεν{'η' if len(ph) == 1 else 'ες'} φάσ{'η' if len(ph) == 1 else 'εις'}" if ph else ""}.</p>
