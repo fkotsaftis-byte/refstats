@@ -4,29 +4,46 @@
   document.querySelectorAll("select[data-nav]").forEach(function (s) {
     s.addEventListener("change", function () { location.href = s.value; });
   });
-  // home board: switch metric ("a|b" = paired metric: υπέρ|κατά, two bars, sorted by υπέρ − κατά)
-  var chips = document.getElementById("metricChips"), board = document.getElementById("board");
+  // home board: switch metric ("a|b" = paired metric υπέρ|κατά: two bars, user picks the sort —
+  // difference, υπέρ or κατά; pressing the active sort button again reverses its direction)
+  var chips = document.getElementById("metricChips"), board = document.getElementById("board"), sortBy = document.getElementById("sortBy");
   if (chips && board) {
-    chips.addEventListener("click", function (e) {
-      var b = e.target.closest("button"); if (!b) return;
-      var k = b.dataset.m, div = k === "saldo", pair = k.indexOf("|") > -1;
-      var ks = k.split("|"), at = function (x) { return "data-" + x.replace(/_/g, "-"); };
-      var get = function (r, x) { return +r.getAttribute(at(x)); };
-      var key = function (r) { return pair ? get(r, ks[0]) - get(r, ks[1]) : get(r, ks[0]); };
-      chips.querySelectorAll("button").forEach(function (x) { x.setAttribute("aria-pressed", x === b); });
-      document.getElementById("formula").textContent = b.dataset.note;
+    var cur = "saldo", mode = "diff", desc = true;
+    var at = function (x) { return "data-" + x.replace(/_/g, "-"); };
+    var get = function (r, x) { return +r.getAttribute(at(x)); };
+    var render = function () {
+      var k = cur, div = k === "saldo", pair = k.indexOf("|") > -1, ks = k.split("|");
+      var key = function (r) {
+        if (!pair) return get(r, ks[0]);
+        return mode === "for" ? get(r, ks[0]) : mode === "against" ? get(r, ks[1]) : get(r, ks[0]) - get(r, ks[1]);
+      };
+      var sgn = pair && !desc ? -1 : 1;
+      var tie = function (a, c) {  // on equal keys: diff → fewer κατά first; υπέρ/κατά → better difference first
+        if (!pair) return 0;
+        if (mode === "diff") return get(a, ks[1]) - get(c, ks[1]);
+        return (get(c, ks[0]) - get(c, ks[1])) - (get(a, ks[0]) - get(a, ks[1]));
+      };
       var rows = Array.prototype.slice.call(board.children);
-      rows.sort(function (a, c) { return key(c) - key(a) || (pair ? get(a, ks[1]) - get(c, ks[1]) : 0) || a.textContent.localeCompare(c.textContent, "el"); });
+      rows.sort(function (a, c) { return sgn * (key(c) - key(a)) || tie(a, c) || a.textContent.localeCompare(c.textContent, "el"); });
       var max = Math.max.apply(null, rows.map(function (r) { return pair ? Math.max(get(r, ks[0]), get(r, ks[1])) : Math.abs(get(r, ks[0])); }).concat([1]));
       board.classList.toggle("pair", pair);
+      if (sortBy) {
+        sortBy.hidden = !pair;
+        sortBy.querySelectorAll("button").forEach(function (x) {
+          var on = x.dataset.s === mode;
+          x.setAttribute("aria-pressed", on);
+          x.querySelector("i").textContent = on ? (desc ? " ↓" : " ↑") : "";
+        });
+      }
       rows.forEach(function (r, i) {
         var bar = r.querySelector(".b"), bar2 = r.querySelector(".b2"), val = r.querySelector(".val");
         r.querySelector(".zero").hidden = !div;
         if (pair) {
-          var u = get(r, ks[0]), kk = get(r, ks[1]);
+          var u = get(r, ks[0]), kk = get(r, ks[1]), d = u - kk;
           bar.style.background = "var(--pos)"; bar.style.left = "0"; bar.style.width = (u / max * 100) + "%";
           bar2.style.background = "var(--neg)"; bar2.style.width = (kk / max * 100) + "%"; bar2.hidden = false;
-          val.innerHTML = '<span class="pos">' + u + '</span>–<span class="neg">' + kk + "</span>";
+          val.innerHTML = '<span class="pos">' + u + '</span>–<span class="neg">' + kk + '</span><small class="' +
+            (d > 0 ? "pos" : d < 0 ? "neg" : "nil") + '">' + (d > 0 ? "+" + d : d) + "</small>";
           val.className = "val pv";
         } else {
           var v = get(r, ks[0]), w = Math.abs(v) / max * (div ? 50 : 100);
@@ -41,6 +58,18 @@
         r.classList.toggle("top", i < 3);
         board.appendChild(r);
       });
+    };
+    chips.addEventListener("click", function (e) {
+      var b = e.target.closest("button"); if (!b) return;
+      cur = b.dataset.m;
+      chips.querySelectorAll("button").forEach(function (x) { x.setAttribute("aria-pressed", x === b); });
+      document.getElementById("formula").textContent = b.dataset.note;
+      render();
+    });
+    if (sortBy) sortBy.addEventListener("click", function (e) {
+      var b = e.target.closest("button"); if (!b) return;
+      if (b.dataset.s === mode) desc = !desc; else { mode = b.dataset.s; desc = true; }
+      render();
     });
   }
   // sortable tables
