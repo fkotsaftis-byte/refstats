@@ -316,3 +316,12 @@ table.refs th:first-child,table.refs td:first-child{position:sticky;left:0;backg
 .board.pair .row{grid-template-columns:34px minmax(110px,190px) 1fr 64px}
 .val.pv{font-size:18px;white-space:nowrap}.val.pv .pos{color:var(--pos)}.val.pv .neg{color:var(--neg)}
 @media (max-width:560px){.board.pair .row{grid-template-columns:28px minmax(80px,110px) 1fr 58px}.val.pv{font-size:15px}}
+.sortby{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin:-4px 0 12px;font-size:12px;color:var(--muted)}
+.sortby[hidden]{display:none}
+.sortby button{font-family:var(--body);font-size:12px;font-weight:600;padding:4px 9px;border:1px solid var(--line);background:var(--surface);color:var(--ink);border-radius:999px;cursor:pointer}
+.sortby button[aria-pressed="true"]{border-color:var(--ink);background:var(--ink);color:var(--bg)}
+.sortby button i{font-style:normal}
+.val.pv small{display:block;font-size:11px;font-weight:600;line-height:1.1}
+.val.pv small.nil{color:var(--muted)}
+.board.pair .row{grid-template-columns:34px minmax(110px,190px) 1fr 70px}
+@media (max-width:560px){.board.pair .row{grid-template-columns:28px minmax(80px,110px) 1fr 60px}}
