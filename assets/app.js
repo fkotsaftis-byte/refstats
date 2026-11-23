@@ -4,25 +4,39 @@
   document.querySelectorAll("select[data-nav]").forEach(function (s) {
     s.addEventListener("change", function () { location.href = s.value; });
   });
-  // home board: switch metric
+  // home board: switch metric ("a|b" = paired metric: υπέρ|κατά, two bars, sorted by υπέρ − κατά)
   var chips = document.getElementById("metricChips"), board = document.getElementById("board");
   if (chips && board) {
     chips.addEventListener("click", function (e) {
       var b = e.target.closest("button"); if (!b) return;
-      var k = b.dataset.m, attr = "data-" + k.replace(/_/g, "-"), div = k === "saldo";
+      var k = b.dataset.m, div = k === "saldo", pair = k.indexOf("|") > -1;
+      var ks = k.split("|"), at = function (x) { return "data-" + x.replace(/_/g, "-"); };
+      var get = function (r, x) { return +r.getAttribute(at(x)); };
+      var key = function (r) { return pair ? get(r, ks[0]) - get(r, ks[1]) : get(r, ks[0]); };
       chips.querySelectorAll("button").forEach(function (x) { x.setAttribute("aria-pressed", x === b); });
       document.getElementById("formula").textContent = b.dataset.note;
       var rows = Array.prototype.slice.call(board.children);
-      rows.sort(function (a, c) { return (+c.getAttribute(attr)) - (+a.getAttribute(attr)) || a.textContent.localeCompare(c.textContent, "el"); });
-      var max = Math.max.apply(null, rows.map(function (r) { return Math.abs(+r.getAttribute(attr)); }).concat([1]));
+      rows.sort(function (a, c) { return key(c) - key(a) || (pair ? get(a, ks[1]) - get(c, ks[1]) : 0) || a.textContent.localeCompare(c.textContent, "el"); });
+      var max = Math.max.apply(null, rows.map(function (r) { return pair ? Math.max(get(r, ks[0]), get(r, ks[1])) : Math.abs(get(r, ks[0])); }).concat([1]));
+      board.classList.toggle("pair", pair);
       rows.forEach(function (r, i) {
-        var v = +r.getAttribute(attr), w = Math.abs(v) / max * (div ? 50 : 100), bar = r.querySelector(".b"), val = r.querySelector(".val");
+        var bar = r.querySelector(".b"), bar2 = r.querySelector(".b2"), val = r.querySelector(".val");
         r.querySelector(".zero").hidden = !div;
-        bar.style.background = div ? (v >= 0 ? "var(--pos)" : "var(--neg)") : "var(--bar)";
-        bar.style.left = div ? (v >= 0 ? 50 : 50 - w) + "%" : "0";
-        bar.style.width = w + "%";
-        val.textContent = div && v > 0 ? "+" + v : v;
-        val.className = "val " + (div ? (v > 0 ? "pos" : v < 0 ? "neg" : "nil") : "");
+        if (pair) {
+          var u = get(r, ks[0]), kk = get(r, ks[1]);
+          bar.style.background = "var(--pos)"; bar.style.left = "0"; bar.style.width = (u / max * 100) + "%";
+          bar2.style.background = "var(--neg)"; bar2.style.width = (kk / max * 100) + "%"; bar2.hidden = false;
+          val.innerHTML = '<span class="pos">' + u + '</span>–<span class="neg">' + kk + "</span>";
+          val.className = "val pv";
+        } else {
+          var v = get(r, ks[0]), w = Math.abs(v) / max * (div ? 50 : 100);
+          bar2.hidden = true;
+          bar.style.background = div ? (v >= 0 ? "var(--pos)" : "var(--neg)") : "var(--bar)";
+          bar.style.left = div ? (v >= 0 ? 50 : 50 - w) + "%" : "0";
+          bar.style.width = w + "%";
+          val.textContent = div && v > 0 ? "+" + v : v;
+          val.className = "val " + (div ? (v > 0 ? "pos" : v < 0 ? "neg" : "nil") : "");
+        }
         r.querySelector(".rk").textContent = i + 1;
         r.classList.toggle("top", i < 3);
         board.appendChild(r);
