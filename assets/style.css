@@ -310,3 +310,9 @@ table.refs td.l{white-space:normal;min-width:170px}
 table.refs .pill{font-size:9.5px;padding:0 5px}
 table.refs th:first-child,table.refs td:first-child{position:sticky;left:0;background:var(--surface);z-index:1;box-shadow:1px 0 0 var(--line)}
 @media (max-width:480px){table.refs td.l{min-width:130px}}
+/* αρχική: μετρικές υπέρ–κατά */
+.track .b2{position:absolute;left:0;top:55%;height:45%;border-radius:2px}
+.board.pair .track .b{height:45%}
+.board.pair .row{grid-template-columns:34px minmax(110px,190px) 1fr 64px}
+.val.pv{font-size:18px;white-space:nowrap}.val.pv .pos{color:var(--pos)}.val.pv .neg{color:var(--neg)}
+@media (max-width:560px){.board.pair .row{grid-template-columns:28px minmax(80px,110px) 1fr 58px}.val.pv{font-size:15px}}
