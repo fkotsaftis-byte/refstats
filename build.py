@@ -257,12 +257,12 @@ def lean_teams():
     return [t for t, _ in sorted(ts.items(), key=lambda x: (big.get(x[0], 9), -x[1], x[0]))]
 
 # ---------------------------------------------------------------- stats
-KEYS = ["n", "pen_for", "pen_against", "var_for", "var_against", "red_opp", "red_own", "yel", "yel_opp", "foul", "ann", "w", "d", "l"]
+KEYS = ["n", "pen_for", "pen_against", "var_for", "var_against", "red_opp", "red_own", "yel", "yel_opp", "foul", "foul_opp", "ann", "w", "d", "l"]
 def side(m, team):
     h = team == m["home"]; o, p = ("h", "a") if h else ("a", "h")
     gf, ga = (m["gh"], m["ga"]) if h else (m["ga"], m["gh"])
     return {"n": 1, "pen_for": m["pen_" + o], "pen_against": m["pen_" + p], "var_for": m["var_" + o], "var_against": m["var_" + p],
-            "red_opp": m["red_" + p], "red_own": m["red_" + o], "yel": m["yel_" + o], "yel_opp": m["yel_" + p], "foul": m["foul_" + o], "ann": m["ann_" + o],
+            "red_opp": m["red_" + p], "red_own": m["red_" + o], "yel": m["yel_" + o], "yel_opp": m["yel_" + p], "foul": m["foul_" + o], "foul_opp": m["foul_" + p], "ann": m["ann_" + o],
             "w": int(gf > ga), "d": int(gf == ga), "l": int(gf < ga)}
 def saldo(t): return (t["pen_for"] + t["var_for"] + t["red_opp"]) - (t["pen_against"] + t["var_against"] + t["red_own"])
 def totals(ms, team):
@@ -403,10 +403,11 @@ METRICS = [
     ("var_for", "VAR υπέρ", "Επεμβάσεις VAR που άλλαξαν απόφαση υπέρ της ομάδας."),
     ("var_against", "VAR κατά", "Επεμβάσεις VAR που άλλαξαν απόφαση κατά της ομάδας."),
     ("ann", "Ακυρωθέντα γκολ", "Γκολ της ομάδας που δεν μέτρησαν."),
-    ("red_own", "Κόκκινες", "Αποβολές παικτών της ομάδας (μαζί με τη 2η κίτρινη)."),
-    ("yel", "Κίτρινες", "Κίτρινες κάρτες σε παίκτες της ομάδας."),
-    ("foul", "Φάουλ", "Φάουλ που έκανε η ομάδα."),
+    ("red_opp|red_own", "Κόκκινες υπέρ–κατά", "Υπέρ: αποβολές αντιπάλων. Κατά: αποβολές παικτών της ομάδας (μαζί με τη 2η κίτρινη). Ταξινόμηση με τη διαφορά υπέρ − κατά."),
+    ("yel_opp|yel", "Κίτρινες υπέρ–κατά", "Υπέρ: κίτρινες σε αντιπάλους. Κατά: κίτρινες σε παίκτες της ομάδας. Ταξινόμηση με τη διαφορά υπέρ − κατά."),
+    ("foul_opp|foul", "Φάουλ υπέρ–κατά", "Υπέρ: φάουλ που σφυρίχτηκαν υπέρ της ομάδας (τα έκανε ο αντίπαλος). Κατά: φάουλ που έκανε η ομάδα. Ταξινόμηση με τη διαφορά υπέρ − κατά."),
 ]
+METRIC_KEYS = [k for m, _, _ in METRICS for k in m.split("|")]
 
 def board(here, T):
     """prerendered saldo board; app.js re-sorts it for the other metrics using data-* attributes."""
@@ -415,10 +416,10 @@ def board(here, T):
     out = []
     for i, t in enumerate(T):
         v = t["saldo"]; w = abs(v) / mx * 50
-        data = " ".join(f'data-{k.replace("_", "-")}="{t[k]}"' for k, _, _ in METRICS)
+        data = " ".join(f'data-{k.replace("_", "-")}="{t[k]}"' for k in METRIC_KEYS)
         out.append(f'<div class="row{" top" if i < 3 else ""}" {data}><span class="rk">{i+1}</span>'
                    f'<span class="nm">{team_link(here, t["team"])}<span>{t["n"]} αγ.</span></span>'
-                   f'<span class="track"><span class="zero"></span><span class="b" style="background:var({"--pos" if v >= 0 else "--neg"});left:{50 if v >= 0 else 50 - w:.2f}%;width:{w:.2f}%"></span></span>'
+                   f'<span class="track"><span class="zero"></span><span class="b2"></span><span class="b" style="background:var({"--pos" if v >= 0 else "--neg"});left:{50 if v >= 0 else 50 - w:.2f}%;width:{w:.2f}%"></span></span>'
                    f'<span class="val {cls(v)}">{sg(v)}</span></div>')
     chips = "".join(f'<button type="button" data-m="{k}" data-note="{esc(n)}"{" aria-pressed=\"true\"" if k == "saldo" else " aria-pressed=\"false\""}>{l}</button>' for k, l, n in METRICS)
     return (f'<div class="chips" id="metricChips">{chips}</div><p class="formula" id="formula">{esc(METRICS[0][2])}</p>'
@@ -495,6 +496,11 @@ def podiums(here, ms, T):
     card("c-pink", "Ο διαιτητής των πέναλτι", f"{v:.2f}".rstrip("0").rstrip(".").replace(".", ",") if v is not None else "—", f"πέναλτι ανά αγώνα · τουλάχιστον {mn} αγώνες", w, "ref")
     return f'{strip}<h2 class="podh"><span>Τα ρεκόρ της σεζόν</span></h2><div class="pods">{"".join(cards)}</div>'
 
+def votes_txt(p):
+    """'τηλεκριτικοί: 2 λάθος · 1 εν μέρει · 1 σωστή' — the partial votes are never folded into the full ones."""
+    c, ok, bad = consensus(p); part = parts(p); full = bad - part
+    bits = [f"{full} λάθος"] + ([f"{part} εν μέρει"] if part else []) + [f"{ok} σωστή"]
+    return "τηλεκριτικοί: " + " · ".join(bits)
 NOTHING = {"τίποτα", "τιποτα", "-", "—", "δεν δόθηκε", "δεν δοθηκε", "κανένα", "καμία"}
 def err_line(p):
     """Category and decision without repeating words:
@@ -527,7 +533,7 @@ def season_errors(path, s, limit=8):
         pill = '<span class="er-v bad">Λάθος</span>' if c == "Λάθος" else '<span class="er-v part">Εν μέρει λάθος</span>'
         rows.append(f'<a class="er" href="{href}"><span class="er-m">{esc(m["home"])}–{esc(m["away"])}{score} · {round_label(m)}</span>'
                     f'<span class="er-p"><b>{esc(p["min"])}\'</b> {esc(err_line(p))}</span>'
-                    f'<span class="er-w">Ωφελήθηκε: <b>{esc(p["ben"])}</b> · τηλεκριτικοί {bad}–{ok}</span>{pill}</a>')
+                    f'<span class="er-w">Ωφελήθηκε: <b>{esc(p["ben"])}</b> · {votes_txt(p)}</span>{pill}</a>')
     more = f' · <a href="{rel(path, "tilekritiki/")}">Όλες οι φάσεις</a>' if len(ph) > limit else ""
     sumline = f'{len(ph)} λάθ{"ος" if len(ph) == 1 else "η"} κατά την πλειοψηφία των τηλεκριτικών' + (f' ({full} καθαρά, {part} εν μέρει)' if part else "")
     return (f'{head}<p class="lead">{sumline}. <a href="{rel(path, "tilekritiki/isozygio/")}">Ποιος ευνοήθηκε, ποιος αδικήθηκε</a>{more}</p>'
