@@ -495,6 +495,22 @@ def podiums(here, ms, T):
     card("c-pink", "Ο διαιτητής των πέναλτι", f"{v:.2f}".rstrip("0").rstrip(".").replace(".", ",") if v is not None else "—", f"πέναλτι ανά αγώνα · τουλάχιστον {mn} αγώνες", w, "ref")
     return f'{strip}<h2 class="podh"><span>Τα ρεκόρ της σεζόν</span></h2><div class="pods">{"".join(cards)}</div>'
 
+NOTHING = {"τίποτα", "τιποτα", "-", "—", "δεν δόθηκε", "δεν δοθηκε", "κανένα", "καμία"}
+def err_line(p):
+    """Category and decision without repeating words:
+    'Πέναλτι'+'Πέναλτι' → 'Πέναλτι που δόθηκε', 'Κόκκινη κάρτα'+'Τίποτα' → 'Κόκκινη κάρτα που δεν δόθηκε',
+    'Πέναλτι'+'Φάουλ' → 'Πέναλτι · δόθηκε φάουλ'."""
+    cat, dec = p["cat"].strip(), p["dec"].strip()
+    c, d = cat.lower(), dec.lower()
+    if not dec: return cat
+    if d.startswith(("κατοχυρώθηκε", "ακυρώθηκε")):  # goals: 'Γκολ – οφσάιντ · κατοχυρώθηκε'
+        d1 = dec.split()[0].lower()
+        return f"{cat} · {d1}" if c.startswith("γκολ") else f"{cat} · {dec[0].lower() + dec[1:]}"
+    if d in NOTHING or d.startswith("δεν δόθηκε") or d.startswith("δεν δοθηκε"): return f"{cat} που δεν δόθηκε"
+    if d == c or d in ("δόθηκε " + c, "δόθηκε") or (c.split()[0] in d and not d.startswith("δεν")):
+        return f"{cat} που δόθηκε"
+    d0 = dec[0].lower() + dec[1:] if not dec[:2].isupper() else dec
+    return f"{cat} · δόθηκε {d0}" if not d.startswith(("δόθηκε", "ακυρώθηκε", "κατοχυρώθηκε")) else f"{cat} · {d0}"
 def season_errors(path, s, limit=8):
     ph = [p for p in PH if p["m"]["season"] == s and consensus(p)[0] in WRONG]
     if not PH: return ""
@@ -510,7 +526,7 @@ def season_errors(path, s, limit=8):
         score = f' {bm["gh"]}–{bm["ga"]}' if bm else ""
         pill = '<span class="er-v bad">Λάθος</span>' if c == "Λάθος" else '<span class="er-v part">Εν μέρει λάθος</span>'
         rows.append(f'<a class="er" href="{href}"><span class="er-m">{esc(m["home"])}–{esc(m["away"])}{score} · {round_label(m)}</span>'
-                    f'<span class="er-p"><b>{esc(p["min"])}\'</b> {esc(p["cat"])} · {esc(p["dec"])}</span>'
+                    f'<span class="er-p"><b>{esc(p["min"])}\'</b> {esc(err_line(p))}</span>'
                     f'<span class="er-w">Ωφελήθηκε: <b>{esc(p["ben"])}</b> · τηλεκριτικοί {bad}–{ok}</span>{pill}</a>')
     more = f' · <a href="{rel(path, "tilekritiki/")}">Όλες οι φάσεις</a>' if len(ph) > limit else ""
     sumline = f'{len(ph)} λάθ{"ος" if len(ph) == 1 else "η"} κατά την πλειοψηφία των τηλεκριτικών' + (f' ({full} καθαρά, {part} εν μέρει)' if part else "")
