@@ -353,6 +353,8 @@ b.addEventListener("click",function(e){var v=e.target.getAttribute("data-c");if(
 var l=document.getElementById("ckset");if(l)l.addEventListener("click",function(e){e.preventDefault();try{localStorage.removeItem("rs_consent")}catch(x){}b.hidden=false;});})();</script>""" % GA4
 
 CONTACT = (CFG.get("contact_email") or "info@refstats.gr").strip()
+X_HANDLE = (CFG.get("x") or "").rstrip("/").rsplit("/", 1)[-1]
+X_SITE = f'<meta name="twitter:site" content="@{X_HANDLE}">' if X_HANDLE else ""
 SOCIAL = [(k, v) for k, v in (("Instagram", CFG.get("instagram") or "https://www.instagram.com/refstats.gr/"), ("X", CFG.get("x") or "")) if v]
 def mail_link():
     """Address assembled by app.js, so it is not in the HTML in plain form (fewer spam bots)."""
@@ -376,7 +378,7 @@ def page(path, title, desc, body, priority="0.6", canonical=None):
 <meta property="og:type" content="website"><meta property="og:site_name" content="refstats.gr">
 <meta property="og:title" content="{esc(title)}"><meta property="og:description" content="{esc(desc)}"><meta property="og:url" content="{esc(can)}">
 <meta property="og:locale" content="el_GR"><meta property="og:image" content="{SITE}/assets/og.jpg"><meta property="og:image:width" content="1200"><meta property="og:image:height" content="630"><meta property="og:image:alt" content="refstats.gr · Στατιστικά διαιτησίας Super League">
-<meta name="twitter:card" content="summary_large_image"><meta name="twitter:title" content="{esc(title)}"><meta name="twitter:description" content="{esc(desc)}"><meta name="twitter:image" content="{SITE}/assets/og.jpg">
+<meta name="twitter:card" content="summary_large_image">{X_SITE}<meta name="twitter:title" content="{esc(title)}"><meta name="twitter:description" content="{esc(desc)}"><meta name="twitter:image" content="{SITE}/assets/og.jpg">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect x='9' y='4' width='14' height='22' rx='2' fill='%23F2C230' transform='rotate(-9 16 16)'/%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fira+Sans+Extra+Condensed:wght@500;700;800&family=Commissioner:wght@400;500;600&display=swap">
@@ -909,11 +911,19 @@ def rounds_index():
                   '<p class="note">Οι ετικέτες «VAR:» είναι αποφάσεις που άλλαξαν μετά από επέμβαση του VAR. Είναι νούμερα, όχι κατηγορίες.</p>')
     parts = []
     for s_ in SEASONS:
-        links = "".join(f'<a href="{rel(path, round_path(m))}">{m["round"]}{"" if m["phase"] == "Κανονική" else " " + esc(m["phase"])}</a>' for m in rounds_of(season_ms(s_)))
-        parts.append(f'<h2>Σεζόν {s_}</h2><div class="roundlinks">{links}</div>')
+        rs = rounds_of(season_ms(s_)); groups = {}
+        for m in rs: groups.setdefault(m["phase"], []).append(m)
+        multi = len(groups) > 1
+        rows = "".join((f'<div class="rgroup"><span class="rphase">{esc(ph)}</span>' if multi else '<div class="rgroup">')
+                       + f'<div class="roundlinks">{"".join(f"""<a href="{rel(path, round_path(m))}">{m["round"]}</a>""" for m in ms_)}</div></div>'
+                       for ph, ms_ in groups.items())
+        if s_ == CUR:
+            parts.append(f'<h3>Σεζόν {s_}</h3>{rows}')
+        else:  # past seasons stay folded: one line until opened
+            parts.append(f'<details class="oldseason"><summary>Σεζόν {s_} <span>· {len(rs)} αγωνιστικές</span></summary>{rows}</details>')
     page(path, "Αγωνιστικές Super League: διαιτητές και VAR · refstats.gr",
          "Η τελευταία αγωνιστική της Super League και όλες οι προηγούμενες, με τους διαιτητές, τα πέναλτι, τις κόκκινες και τις επεμβάσεις VAR κάθε αγώνα.",
-         "<h1>Αγωνιστικές</h1>" + (f'<p class="lead"><a href="{rel(path, "orismoi/")}">Οι ορισμοί της επόμενης αγωνιστικής →</a></p>' if upcoming()[0] else "") + latest + '<h2 style="margin-top:34px">Όλες οι αγωνιστικές</h2>' + "".join(parts).replace("<h2>", "<h3>").replace("</h2>", "</h3>"), "0.7")
+         "<h1>Αγωνιστικές</h1>" + (f'<p class="lead"><a href="{rel(path, "orismoi/")}">Οι ορισμοί της επόμενης αγωνιστικής →</a></p>' if upcoming()[0] else "") + latest + '<h2 style="margin-top:34px">Όλες οι αγωνιστικές</h2>' + "".join(parts), "0.7")
 
 # ---------------------------------------------------------------- ορισμοί επόμενης αγωνιστικής
 def upcoming():
@@ -957,7 +967,7 @@ def orismos_card(here, m):
         st = (f'<div class="os-k"><span><b>{cur["n"]}</b>αγώνες φέτος</span><span><b>{num(cur["ppm"])}</b>πέναλτι/αγ.</span>'
               f'<span><b>{num(cur["ypm"])}</b>κίτρινες/αγ.</span><span><b>{cur["red"]}</b>κόκκινες</span><span><b>{cur["var"]}</b>VAR που άλλαξαν απόφαση</span></div>')
     else:
-        st = '<p class="note">Πρώτος αγώνας {tou} ως κύριος διαιτητής φέτος.</p>'
+        st = f'<p class="note">Πρώτος αγώνας {tou} ως κύριος διαιτητής φέτος.</p>'
     hist = []
     for t in (m["home"], m["away"]):
         r = with_ref(ref, t)
@@ -967,7 +977,7 @@ def orismos_card(here, m):
             hist.append(f'<tr><td class="l">{tlink(here, t)}</td><td colspan="4" class="few">πρώτη φορά μαζί {tou} στα δεδομένα μας</td></tr>')
     ht = ('<div class="tablewrap"><table class="t os-h"><tr><th class="l">Με ' + ("την " if fem else "τον ") + esc(acc_surname(ref, fem)) + '</th><th>Αγ.</th><th>Ν-Ι-Η</th><th>Πέναλτι υπέρ–κατά</th><th>Κόκκινες υπέρ–κατά</th></tr>'
           + "".join(hist) + '</table></div>')
-    wl = f'<p class="note">Στους αγώνες {tou}, η πλειοψηφία των τηλεκριτικών έχει κρίνει λάθος <b>{len(wrong)}</b> απόφασ{"η" if len(wrong) == 1 else "εις"}.</p>' if PH and allm["n"] else ""
+    wl = f'<p class="note">Στους αγώνες {tou}, η πλειοψηφία των τηλεκριτικών έχει κρίνει λάθος <b>{len(wrong)}</b> {"απόφαση" if len(wrong) == 1 else "αποφάσεις"}.</p>' if PH and allm["n"] else ""
     when = fdate(m["date"]) + (f' · {esc(m.get("time", ""))}' if m.get("time") else "")
     return (f'<article class="os"><div class="os-t"><b>{esc(m["home"])}–{esc(m["away"])}</b><span>{when}</span></div>'
             f'<div class="os-r">Διαιτητής: <b>{plink(here, ref)}</b>{" · VAR: " + plink(here, var) if var else ""}</div>'
