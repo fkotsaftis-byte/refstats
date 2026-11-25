@@ -385,13 +385,14 @@ def page(path, title, desc, body, priority="0.6", canonical=None):
 <body>
 <div class="wrap">
 <header class="mast">
-  <a class="logo" href="{rel(here, "")}"><span class="yc" aria-hidden="true"></span><span>refstats<small>.gr</small></span></a>
+  <a class="logo" href="{rel(here, "")}"><span class="yc" aria-hidden="true"></span><span>refstats<small>.gr</small></span><abbr class="beta" title="Δοκιμαστική λειτουργία: τα δεδομένα συμπληρώνονται και ελέγχονται διαρκώς">BETA</abbr></a>
   <nav class="top">{navh}</nav>
 </header>
 <main>
 {body}
 </main>
 <footer>
+  <p class="betanote"><b>BETA</b> · Το refstats.gr είναι σε δοκιμαστική λειτουργία: συμπληρώνουμε σεζόν, φάσεις και ανακοινώσεις και τα στοιχεία ανανεώνονται διαρκώς. Βρήκες λάθος; Γράψε μας στο {mail_link()}.</p>
   <p>refstats.gr · Ανεξάρτητη καταγραφή στατιστικών διαιτησίας της Super League. Δεν σχετίζεται με την ΕΠΟ, την ΚΕΔ ή τη Super League.</p>
   <p>Τελευταία ενημέρωση: {UPDATED} · <a href="{rel(here, "methodologia/")}">Μεθοδολογία</a> · <a href="{rel(here, "aporrito/")}">Πολιτική απορρήτου</a>{' · <a href="#" id="ckset">Ρυθμίσεις cookies</a>' if GA4 else ""} · Επικοινωνία: {mail_link()}{"".join(f' · <a href="{esc(u)}" rel="me noopener" target="_blank">{k}</a>' for k, u in SOCIAL)}</p>
 </footer>
@@ -699,21 +700,23 @@ def refs_index(s=None):
         vn = len(byvar.get(p, [])); vi = sum(len(m["var_items"]) for m in byvar.get(p, []))
         flag = f' <span class="pill">{esc(REFS[p]["assoc"])}</span>' if REFS.get(p, {}).get("foreign") else ""
         if s_["n"]:
-            rc = (f'<td data-v="{s_["n"]}">{s_["n"]}</td><td data-v="{errs.get(p, 0)}">{nf(errs.get(p, 0)) if hp else "—"}</td><td data-v="{s_["var"]}">{s_["var"] if hv else "—"}</td>'
+            rc = (f'<td data-v="{s_["n"]}">{s_["n"]}</td>' + (f'<td data-v="{errs.get(p, 0)}">{nf(errs.get(p, 0))}</td>' if hp else "") + f'<td data-v="{s_["var"]}">{s_["var"] if hv else "—"}</td>'
                   f'<td data-v="{s_["ppm"]:.3f}">{s_["ppm"]:.2f}</td><td data-v="{s_["ypm"]:.3f}">{s_["ypm"]:.2f}</td><td data-v="{s_["red"]}">{s_["red"]}</td>')
         else:
-            rc = '<td data-v="0">0</td>' + '<td data-v="-1" class="nil">—</td>' * 5
+            rc = '<td data-v="0">0</td>' + '<td data-v="-1" class="nil">—</td>' * (5 if hp else 4)
         vc = (f'<td class="vr" data-v="{vn}">{vn}</td><td class="vr" data-v="{vi}">{vi if hv else "—"}</td>' if vn
               else '<td class="vr" data-v="0">0</td><td class="vr nil" data-v="-1">—</td>')
         tr += f'<tr><td class="l">{ref_link(path, p)}{flag}</td>{rc}{vc}</tr>'
-    extra = "" if hp and hv else ('<br>Για τη σεζόν ' + s + ' δεν έχουν καταγραφεί ' + " και ".join(x for x, ok in (("αμφισβητούμενες φάσεις", hp), ("επεμβάσεις VAR", hv)) if not ok) + ' («—»).')
+    extra = ("" if hp else f'<br>Για τη σεζόν {s} δεν έχει καταγραφεί ακόμα τηλεκριτική, γι\' αυτό δεν υπάρχει στήλη «Λάθη».') + \
+            ("" if hv else f'<br>Για τη σεζόν {s} δεν έχουν καταγραφεί επεμβάσεις VAR («—»).')
+    lathi = (f'Λάθη: αποφάσεις που η πλειοψηφία των τηλεκριτικών έκρινε λάθος (οι «εν μέρει λάθος» δεν μετράνε)· μετράνε μόνο οι <a href="{rel(path, "tilekritiki/")}">αμφισβητούμενες φάσεις</a> που καταγράφουμε. ' if hp else "")
     body = f"""<div class="headrow"><div><h1>Διαιτητές Super League {s}</h1>
 <p class="lead">Μέσος όρος πρωταθλήματος: {lg["ppm"]:.2f} πέναλτι και {lg["ypm"]:.2f} κίτρινες ανά αγώνα. Πάτησε μια στήλη για ταξινόμηση.</p></div>{season_switch(path, s, "diaitites/", "diaitites/{}/")}</div>
 <div class="tablewrap"><table class="t sortable refs"><thead>
-<tr class="grp"><th></th><th colspan="6">Ως διαιτητής</th><th colspan="2" class="vr">Ως VAR</th></tr>
-<tr><th class="l">Διαιτητής</th><th>Αγώνες</th><th>Λάθη</th><th>Επεμβ. VAR</th><th>Πέναλτι/αγ.</th><th>Κίτρινες/αγ.</th><th>Κόκκινες</th><th class="vr">Αγώνες</th><th class="vr">Επεμβ.</th></tr>
+<tr class="grp"><th></th><th colspan="{6 if hp else 5}">Ως διαιτητής</th><th colspan="2" class="vr">Ως VAR</th></tr>
+<tr><th class="l">Διαιτητής</th><th>Αγώνες</th>{"<th>Λάθη</th>" if hp else ""}<th>Επεμβ. VAR</th><th>Πέναλτι/αγ.</th><th>Κίτρινες/αγ.</th><th>Κόκκινες</th><th class="vr">Αγώνες</th><th class="vr">Επεμβ.</th></tr>
 </thead><tbody>{tr}</tbody></table></div>
-<p class="note"><b>Ως διαιτητής</b>, στους αγώνες που σφύριξε στο γήπεδο. Λάθη: αποφάσεις που η πλειοψηφία των τηλεκριτικών έκρινε λάθος (οι «εν μέρει λάθος» δεν μετράνε)· μετράνε μόνο οι <a href="{rel(path, "tilekritiki/")}">αμφισβητούμενες φάσεις</a> που καταγράφουμε. Επεμβ. VAR: αποφάσεις του που άλλαξαν μετά από επέμβαση του VAR.<br>
+<p class="note"><b>Ως διαιτητής</b>, στους αγώνες που σφύριξε στο γήπεδο. {lathi}Επεμβ. VAR: αποφάσεις του που άλλαξαν μετά από επέμβαση του VAR.<br>
 <b>Ως VAR</b>, στους αγώνες όπου ήταν στο δωμάτιο του VAR. Επεμβ. ως VAR: πόσες φορές η επέμβασή του άλλαξε την απόφαση του διαιτητή.{extra}</p>"""
     page(path, f"Διαιτητές Super League {s}: πέναλτι, κάρτες, VAR · refstats.gr",
          f"Στατιστικά κάθε διαιτητή της Super League {s}: αγώνες, λάθη κατά τους τηλεκριτικούς, επεμβάσεις VAR, πέναλτι και κάρτες ανά αγώνα, και τα στατιστικά του ως VAR.", body, "0.9" if s == CUR else "0.6")
