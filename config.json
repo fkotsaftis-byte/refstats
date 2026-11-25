@@ -13,5 +13,6 @@
   },
   "ga4_id": "G-0GXBR6H9VN",
   "hidden_seasons": [],
-  "poll_api": "https://refstats-poll.refstatsgr.workers.dev"
+  "poll_api": "https://refstats-poll.refstatsgr.workers.dev",
+  "x": "https://x.com/refstatsgr"
 }
