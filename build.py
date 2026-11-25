@@ -621,26 +621,18 @@ def team_page(team):
     k = kpis([("Ισοζύγιο", sg(t["saldo"]), cls(t["saldo"])), ("Πέναλτι υπέρ / κατά", f'{t["pen_for"]} / {t["pen_against"]}', ""),
               ("VAR υπέρ / κατά", f'{t["var_for"]} / {t["var_against"]}' if has(last_s, "var") else "—", ""), ("Κόκκινες υπέρ / κατά", f'{t["red_opp"]} / {t["red_own"]}', ""),
               ("Κίτρινες υπέρ / κατά", f'{t["yel_opp"]} / {t["yel"]}', ""), ("Αγώνες", t["n"], "")])
-    # by referee, all seasons, vs team average
-    avg = allt["saldo"] / allt["n"] if allt["n"] else 0
+    # by referee, all seasons
     byref = defaultdict(list)
     for m in ms:
         if m["ref"]: byref[m["ref"]].append(m)
-    rr = []
-    for p, lst in byref.items():
-        tt = totals(lst, team); per = tt["saldo"] / tt["n"]
-        rr.append((per - avg, p, tt, per))
-    rr.sort(key=lambda x: (-x[0], x[1]))
-    rt = "".join(f'<tr><td class="l">{ref_link(path, p)}{" <span class=\"pill\">μικρό δείγμα</span>" if tt["n"] < 5 else ""}</td><td>{tt["n"]}</td>'
-                 f'<td>{tt["w"]}-{tt["d"]}-{tt["l"]}</td><td class="{cls(tt["saldo"])}">{sg(tt["saldo"])}</td><td>{per:+.2f}</td><td class="{cls(round(d, 2))}"><b>{d:+.2f}</b></td></tr>'
-                 for d, p, tt, per in rr)
+    items = [(ref_link(path, p), team, lst) for p, lst in sorted(byref.items(), key=lambda x: (-len(x[1]), x[0]))]
     body = f"""<p class="crumb"><a href="{rel(path, "")}">Ομάδες</a> / {esc(team)}</p>
 <h1>{esc(team)}: στατιστικά διαιτησίας</h1>
 <p class="lead">{"Σεζόν " + last_s if last_s == CUR else "Τελευταία σεζόν στη Super League (" + last_s + ")"}: {t["w"]} νίκες, {t["d"]} ισοπαλίες, {t["l"]} ήττες σε {t["n"]} αγώνες.</p>
 {k}{team_seasons(path, team, ms)}
 <h2>Με κάθε διαιτητή</h2>
-<p class="lead">Ισοζύγιο ανά αγώνα με κάθε διαιτητή, σε σύγκριση με τον μέσο όρο της ομάδας ({avg:+.2f}). Όλες οι καταγεγραμμένες σεζόν.</p>
-<div class="tablewrap"><table class="t"><tr><th class="l">Διαιτητής</th><th>Αγώνες</th><th>Ν-Ι-Η</th><th>Ισοζύγιο</th><th>Ανά αγώνα</th><th>Διαφορά</th></tr>{rt}</table></div>
+<p class="lead">Πώς πήγε η ομάδα με κάθε διαιτητή, σε όλες τις καταγεγραμμένες σεζόν. Πάτησε μια στήλη για ταξινόμηση.</p>
+{perf_table("Διαιτητής", items)}
 {team_ph(path, team)}{ann_block(path, [a for a in ANN if a["team"] == team])}
 <h2>Φάσεις VAR</h2>
 {var_list(path, ms, team)}
@@ -648,6 +640,23 @@ def team_page(team):
 {match_table(path, ms, team)}"""
     page(path, f"{team}: διαιτητές, πέναλτι, VAR · Super League {last_s}",
          f"Ισοζύγιο διαιτησίας του {team} στη Super League {last_s}: πέναλτι υπέρ και κατά, κάρτες, επεμβάσεις VAR και στατιστικά με κάθε διαιτητή.", body, "0.8")
+
+def perf_table(label, items):
+    """items: (name_html, team, matches). One row per item: how `team` did in those matches, υπέρ–κατά."""
+    def pair(a, b): return f'<td data-v="{a - b}"><span class="pos">{a}</span>–<span class="neg">{b}</span></td>'
+    tr = ""
+    for name, team, ms in items:
+        mm = totals(ms, team); vm = [m for m in ms if has(m["season"], "var")]; vt = totals(vm, team) if vm else None
+        tr += (f'<tr><td class="l">{name}</td><td data-v="{mm["n"]}">{mm["n"]}</td>'
+               f'<td data-v="{(mm["w"] - mm["l"]) / mm["n"]:.3f}">{mm["w"]}-{mm["d"]}-{mm["l"]}</td>'
+               + pair(mm["pen_for"], mm["pen_against"]) + pair(mm["yel_opp"], mm["yel"]) + pair(mm["red_opp"], mm["red_own"])
+               + (pair(vt["var_for"], vt["var_against"]) if vt else '<td data-v="-99" class="nil">—</td>') + '</tr>')
+    allvar = all(has(m["season"], "var") for _, _, ms in items for m in ms)
+    return (f'<div class="tablewrap"><table class="t sortable rteams"><thead><tr><th class="l">{label}</th><th>Αγώνες</th><th>Ν-Ι-Η</th>'
+            '<th>Πέναλτι<small>υπέρ–κατά</small></th><th>Κίτρινες<small>υπέρ–κατά</small></th><th>Κόκκινες<small>υπέρ–κατά</small></th><th>VAR<small>υπέρ–κατά</small></th>'
+            f'</tr></thead><tbody>{tr}</tbody></table></div>'
+            '<p class="note">Υπέρ: υπέρ της ομάδας (π.χ. κίτρινες υπέρ = κίτρινες στους αντιπάλους της). Κατά: εναντίον της. Οι στήλες υπέρ–κατά ταξινομούνται με τη διαφορά. '
+            f'VAR: επεμβάσεις που άλλαξαν απόφαση{"" if allvar else " (μόνο σεζόν με καταγεγραμμένες επεμβάσεις VAR)"}.</p>')
 
 def team_seasons(path, team, ms):
     ss = sorted({m["season"] for m in ms}, reverse=True)
@@ -759,18 +768,10 @@ def ref_page(p):
                             ("Κόκκινες", s["red"], ""), ("Επεμβάσεις VAR", s["var"], ""), ("Νίκες γηπεδούχου", f'{round(s["hwp"] * 100)}%', "")]))
         blocks.append(ref_seasons(path, p, lst, asvar) or f'<p class="note">Μέσος όρος πρωταθλήματος {lst[0]["season"]}: {ref_stats(season_ms(lst[0]["season"]))["ppm"]:.2f} πέναλτι και {ref_stats(season_ms(lst[0]["season"]))["ypm"]:.2f} κίτρινες ανά αγώνα.</p>')
         teams = sorted({t for m in lst for t in (m["home"], m["away"])})
-        rr = []
-        for t in teams:
-            mine = totals(lst, t); allt = totals([m for m in MATCHES if t in (m["home"], m["away"])], t)
-            per = mine["saldo"] / mine["n"]; avg = allt["saldo"] / allt["n"]
-            rr.append((per - avg, t, mine, per, avg))
-        rr.sort(key=lambda x: (-x[0], x[1]))
-        tr = "".join(f'<tr><td class="l">{team_link(path, t)}{" <span class=\"pill\">μικρό δείγμα</span>" if mm["n"] < 5 else ""}</td><td>{mm["n"]}</td>'
-                     f'<td class="{cls(mm["saldo"])}">{sg(mm["saldo"])}</td><td>{per:+.2f}</td><td>{avg:+.2f}</td><td class="{cls(round(d, 2))}"><b>{d:+.2f}</b></td></tr>'
-                     for d, t, mm, per, avg in rr)
-        blocks.append(f"""<h2>Ισοζύγιο ανά ομάδα</h2>
-<p class="lead">Η διαφορά δείχνει πόσο απέχει το ισοζύγιο της ομάδας ανά αγώνα με αυτόν τον διαιτητή από τον μέσο όρο της με όλους.</p>
-<div class="tablewrap"><table class="t"><tr><th class="l">Ομάδα</th><th>Αγώνες</th><th>Ισοζύγιο</th><th>Ανά αγώνα</th><th>Μ.ο. ομάδας</th><th>Διαφορά</th></tr>{tr}</table></div>
+        items = sorted(((team_link(path, t), t, [m for m in lst if t in (m["home"], m["away"])]) for t in teams), key=lambda x: (-len(x[2]), x[1]))
+        blocks.append(f"""<h2>Ανά ομάδα</h2>
+<p class="lead">Πώς πήγε κάθε ομάδα στους αγώνες που σφύριξε. Πάτησε μια στήλη για ταξινόμηση.</p>
+{perf_table("Ομάδα", items)}
 {ref_ph(path, p)}{ann_block(path, [a for a in ANN if p in (a["m"]["ref"], a["m"]["var"])], title="Ανακοινώσεις ομάδων για τους αγώνες του")}
 <h2>Φάσεις VAR στους αγώνες του</h2>{var_list(path, lst)}
 <h2>Αγώνες</h2>{match_table(path, lst)}""")
