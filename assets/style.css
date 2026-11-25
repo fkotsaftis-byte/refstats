@@ -330,3 +330,9 @@ table.refs th:first-child,table.refs td:first-child{position:sticky;left:0;backg
 .betanote b{background:var(--card);border-radius:3px;padding:1px 5px;font-size:10px;letter-spacing:.8px}
 .rteams th small{display:block;font-size:9px;font-weight:600;letter-spacing:.3px;opacity:.75;text-transform:none}
 @media (max-width:560px){.rteams th,.rteams td{padding-left:7px;padding-right:7px}}
+.rgroup{margin:10px 0 14px}
+.rphase{display:block;font-size:12px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:var(--muted);margin-bottom:6px}
+.oldseason{margin-top:16px;border:1px solid var(--line);border-radius:8px;background:var(--surface);padding:0 14px}
+.oldseason summary{cursor:pointer;padding:12px 0;font-weight:700;font-size:16px}
+.oldseason summary span{font-weight:500;color:var(--muted)}
+.oldseason[open]{padding-bottom:6px}
