@@ -122,8 +122,10 @@ for r in rows("agones"):
          "date": pdate(r.get("Ημερομηνία", "")), "home": r["Γηπεδούχος"], "away": r["Φιλοξενούμενος"],
          "gh": num(r["Γκολ Γηπ"]), "ga": num(r["Γκολ Φιλ"]), "ref": r.get("Διαιτητής", ""), "var": r.get("VAR", ""),
          "src": r.get("Πηγή", ""), "var_items": []}
+    m["filled"] = set()
     for k, col in PAIRS:
         m[k + "_h"] = num(r.get(col + " Γηπ")); m[k + "_a"] = num(r.get(col + " Φιλ"))
+        if (r.get(col + " Γηπ") or "").strip() or (r.get(col + " Φιλ") or "").strip(): m["filled"].add(k)
     MATCHES.append(m)
 BYID = {m["id"]: m for m in MATCHES}
 for r in rows("var"):
@@ -147,6 +149,11 @@ PHASE_ORDER = {"Κανονική": 0, "Πλέι οφ 1-4": 1, "Πλέι οφ 5-8
 MATCHES.sort(key=lambda m: (m["season"], PHASE_ORDER.get(m["phase"], 9), m["round"], m["date"] or datetime.min, m["home"]))
 SEASONS = sorted({m["season"] for m in MATCHES}, reverse=True)
 CUR = SEASONS[0] if SEASONS else ""
+# What each season actually has: older seasons may be filled in with fewer columns (no fouls, no VAR log, no τηλεκριτική).
+HAS = {s_: set().union(*[m["filled"] for m in MATCHES if m["season"] == s_]) for s_ in SEASONS}
+for m in MATCHES:
+    if m["var_items"]: HAS[m["season"]].add("var")
+def has(s_, k): return k in HAS.get(s_, set())
 
 # ---------------------------------------------------------------- τηλεκριτική
 KIND_ORDER = {"Τηλεκριτικός": 0, "Δημοσιογράφος": 1}
@@ -410,7 +417,7 @@ METRICS = [
 ]
 METRIC_KEYS = [k for m, _, _ in METRICS for k in m.split("|")]
 
-def board(here, T):
+def board(here, T, season=None):
     """prerendered saldo board; app.js re-sorts it for the other metrics using data-* attributes."""
     T = sorted(T, key=lambda t: (-t["saldo"], t["team"]))
     mx = max([abs(t["saldo"]) for t in T] + [1])
@@ -422,17 +429,20 @@ def board(here, T):
                    f'<span class="nm">{team_link(here, t["team"])}<span>{t["n"]} αγ.</span></span>'
                    f'<span class="track"><span class="zero"></span><span class="b2"></span><span class="b" style="background:var({"--pos" if v >= 0 else "--neg"});left:{50 if v >= 0 else 50 - w:.2f}%;width:{w:.2f}%"></span></span>'
                    f'<span class="val {cls(v)}">{sg(v)}</span></div>')
-    chips = "".join(f'<button type="button" data-m="{k}" data-note="{esc(n)}"{" aria-pressed=\"true\"" if k == "saldo" else " aria-pressed=\"false\""}>{l}</button>' for k, l, n in METRICS)
-    return (f'<div class="chips" id="metricChips">{chips}</div><p class="formula" id="formula">{esc(METRICS[0][2])}</p>'
+    need = {"var_for|var_against": "var", "foul_opp|foul": "foul", "ann": "ann", "red_opp|red_own": "red"}
+    mets = [x for x in METRICS if season is None or x[0] not in need or has(season, need[x[0]])]
+    note0 = METRICS[0][2] if season is None or has(season, "var") else "Ισοζύγιο: (πέναλτι + κόκκινες υπέρ) − (πέναλτι + κόκκινες κατά). Κόκκινες υπέρ: αποβολές αντιπάλων. Για αυτή τη σεζόν δεν έχουν καταγραφεί επεμβάσεις VAR."
+    chips = "".join(f'<button type="button" data-m="{k}" data-note="{esc(note0 if k == "saldo" else n)}"{" aria-pressed=\"true\"" if k == "saldo" else " aria-pressed=\"false\""}>{l}</button>' for k, l, n in mets)
+    return (f'<div class="chips" id="metricChips">{chips}</div><p class="formula" id="formula">{esc(note0)}</p>'
             '<div class="sortby" id="sortBy" hidden><span>Ταξινόμηση:</span>'
             '<button type="button" data-s="diff" aria-pressed="true">Διαφορά<i></i></button>'
             '<button type="button" data-s="for" aria-pressed="false">Υπέρ<i></i></button>'
             '<button type="button" data-s="against" aria-pressed="false">Κατά<i></i></button></div>'
             f'<div class="board" id="board">{"".join(out)}</div>')
 
-def season_switch(here, s):
+def season_switch(here, s, cur_path="", old_path="sezon/{}/"):
     if len(SEASONS) < 2: return ""
-    opts = "".join(f'<option value="{rel(here, "" if x == CUR else "sezon/" + x + "/")}"{" selected" if x == s else ""}>{x}</option>' for x in SEASONS)
+    opts = "".join(f'<option value="{rel(here, cur_path if x == CUR else old_path.format(x))}"{" selected" if x == s else ""}>{x}</option>' for x in SEASONS)
     return f'<label class="season" for="seasonSel">Σεζόν <select id="seasonSel" data-nav>{opts}</select></label>'
 
 def rounds_of(ms):
@@ -449,7 +459,7 @@ def _leader(items, key, low=False):
 
 def podiums(here, ms, T):
     if not ms: return ""
-    n = len(ms)
+    n = len(ms); hv = has(ms[0]["season"], "var")
     pen = sum(m["pen_h"] + m["pen_a"] for m in ms); red = sum(m["red_h"] + m["red_a"] for m in ms)
     yel = sum(m["yel_h"] + m["yel_a"] for m in ms); var = sum(len(m["var_items"]) for m in ms)
     vann = defaultdict(int)
@@ -458,7 +468,7 @@ def podiums(here, ms, T):
             if v["type"] == "Ακυρώθηκε γκολ" and v["ben"] in (m["home"], m["away"]):
                 vann[m["away"] if v["ben"] == m["home"] else m["home"]] += 1
     strip = (f'<div class="tot"><span class="t-pen"><b>{pen}</b> πέναλτι</span><span class="t-red"><b>{red}</b> κόκκινες</span>'
-             f'<span class="t-ann"><b>{sum(vann.values())}</b> γκολ ακυρώθηκαν από VAR</span><span class="t-var"><b>{var}</b> επεμβάσεις VAR</span>'
+             + (f'<span class="t-ann"><b>{sum(vann.values())}</b> γκολ ακυρώθηκαν από VAR</span><span class="t-var"><b>{var}</b> επεμβάσεις VAR</span>' if hv else "") +
              f'<span class="t-yel"><b>{yel}</b> κίτρινες</span><span class="t-n">{n} αγώνες</span></div>')
     nt = len(T) or 1
     by = {t["team"]: t for t in T}
@@ -483,7 +493,8 @@ def podiums(here, ms, T):
     avgr = sum(t["red_own"] for t in T) / nt
     v, w = _leader([(t["team"], t["red_own"]) for t in T], "red_own")
     card("c-wine", "Περισσότερες κόκκινες", v, f"αποβολές · μέσος όρος {avgr:.1f}".replace(".", ","), w, "team")
-    if vann:
+    if not hv: pass
+    elif vann:
         v, w = _leader(list(vann.items()), "ann")
         card("c-blue", "Το VAR ακύρωσε τα περισσότερα γκολ", v, ("ακυρωθέν γκολ" if v == 1 else "ακυρωθέντα γκολ") + " μετά από VAR", w, "team")
     else:
@@ -524,6 +535,7 @@ def err_line(p):
     return f"{cat} · δόθηκε {d0}" if not d.startswith(("δόθηκε", "ακυρώθηκε", "κατοχυρώθηκε")) else f"{cat} · {d0}"
 def season_errors(path, s, limit=8):
     ph = [p for p in PH if p["m"]["season"] == s and consensus(p)[0] in WRONG]
+    if not any(p["m"]["season"] == s for p in PH) and s != CUR: return ""  # no τηλεκριτική recorded for that season
     if not PH: return ""
     head = '<h2 class="podh"><span>Τα λάθη της σεζόν</span></h2>'
     if not ph:
@@ -543,6 +555,13 @@ def season_errors(path, s, limit=8):
     sumline = f'{len(ph)} λάθ{"ος" if len(ph) == 1 else "η"} κατά την πλειοψηφία των τηλεκριτικών'
     return (f'{head}<p class="lead">{sumline}. <a href="{rel(path, "tilekritiki/isozygio/")}">Ποιος ευνοήθηκε, ποιος αδικήθηκε</a>{more}</p>'
             f'<div class="ers">{"".join(rows)}</div>')
+def season_lead(path, s, ms, last, nvar):
+    parts = [f"{len(ms)} αγώνες"]
+    if has(s, "var"): parts.append(f"{nvar} επεμβάσεις VAR που άλλαξαν απόφαση")
+    if s != CUR: parts.append("ολοκληρωμένη σεζόν (κανονική διάρκεια, πλέι οφ και πλέι άουτ)" if any(m["phase"] != "Κανονική" for m in ms) else "ολοκληρωμένη σεζόν")
+    elif last: parts.append(f'έως την <a href="{rel(path, round_path(last))}">{round_label(last)}</a>')
+    return " · ".join(parts)
+
 def home_page(s, path):
     ms = season_ms(s)
     teams = sorted({t for m in ms for t in (m["home"], m["away"])})
@@ -552,13 +571,13 @@ def home_page(s, path):
     _pp = podiums(path, ms, T); _i = _pp.find('<h2 class="podh">')
     _pod = (_pp[:_i], _pp[_i:]) if _i >= 0 else ("", _pp)  # season totals strip, then the records
     body = f"""<div class="headrow"><div><h1>Ισοζύγιο διαιτησίας Super League {s}</h1>
-<p class="lead">{len(ms)} αγώνες · {nvar} επεμβάσεις VAR που άλλαξαν απόφαση{f' · έως την <a href="{rel(path, round_path(last))}">{round_label(last)}</a>' if last else ''}.</p></div>{season_switch(path, s)}</div>
+<p class="lead">{season_lead(path, s, ms, last, nvar)}.</p></div>{season_switch(path, s)}</div>
 {_pod[0]}
 {orismoi_teaser(path) if path == "" else ""}
 {season_errors(path, s)}
 {_pod[1]}
 <h2>Ισοζύγιο ανά ομάδα</h2>
-{board(path, T)}
+{board(path, T, s)}
 <p class="note">Το ισοζύγιο μετράει αποφάσεις, όχι λάθη. Μια ομάδα που επιτίθεται περισσότερο κερδίζει φυσιολογικά περισσότερα πέναλτι. Δες τη <a href="{rel(path, "methodologia/")}">μεθοδολογία</a>.</p>{'<script type="application/ld+json">' + json.dumps({"@context": "https://schema.org", "@type": "WebSite", "name": "refstats.gr", "url": SITE + "/", "inLanguage": "el", "description": "Στατιστικά διαιτησίας Super League: πέναλτι, κάρτες, VAR και τηλεκριτική.", "publisher": {"@type": "Organization", "name": "refstats.gr", "url": SITE + "/", "email": CONTACT, "sameAs": [u for _, u in SOCIAL]}}, ensure_ascii=False) + '</script>' if path == "" else ""}"""
     title = f"Στατιστικά διαιτησίας Super League {s} · refstats.gr" if path == "" else f"Ισοζύγιο διαιτησίας Super League {s} · refstats.gr"
     desc = f"Πέναλτι, κάρτες και επεμβάσεις VAR υπέρ και κατά κάθε ομάδας της Super League {s}, αγώνα προς αγώνα."
@@ -568,10 +587,11 @@ def kpis(items):
     return '<div class="kpis">' + "".join(f'<div class="kpi"><span>{l}</span><b class="{c}">{v}</b></div>' for l, v, c in items) + "</div>"
 
 def match_table(here, ms, team=None):
-    h = ('<tr><th>Αγ.</th><th>Ημ/νία</th><th class="l">Αγώνας</th><th>Σκορ</th><th class="l">Διαιτητής</th><th>Πέναλτι</th><th>Κάρτες</th><th>VAR</th></tr>')
+    multi = len({m["season"] for m in ms}) > 1
+    h = ('<tr>' + ('<th>Σεζόν</th>' if multi else '') + '<th>Αγ.</th><th>Ημ/νία</th><th class="l">Αγώνας</th><th>Σκορ</th><th class="l">Διαιτητής</th><th>Πέναλτι</th><th>Κάρτες</th><th>VAR</th></tr>')
     rws = []
     for m in sorted(ms, key=lambda m: (m["season"], PHASE_ORDER.get(m["phase"], 9), m["round"]), reverse=True):
-        rws.append(f'<tr><td><a href="{rel(here, round_path(m))}">{m["round"]}{"" if m["phase"] == "Κανονική" else "*"}</a></td><td>{fdate(m["date"])}</td>'
+        rws.append(f'<tr>{"<td>" + m["season"] + "</td>" if multi else ""}<td><a href="{rel(here, round_path(m))}">{m["round"]}{"" if m["phase"] == "Κανονική" else "*"}</a></td><td>{fdate(m["date"])}</td>'
                    f'<td class="l">{team_link(here, m["home"])} – {team_link(here, m["away"])}</td><td><a href="{match_href(here, m)}">{m["gh"]}–{m["ga"]}</a></td>'
                    f'<td class="l">{ref_link(here, m["ref"])}</td><td>{m["pen_h"]}–{m["pen_a"]}</td>'
                    f'<td><i class="cy"></i>{m["yel_h"]}–{m["yel_a"]} <i class="cr"></i>{m["red_h"]}–{m["red_a"]}</td><td>{m["var_h"]}–{m["var_a"]}</td></tr>')
@@ -593,11 +613,12 @@ def var_list(here, ms, team=None):
 def team_page(team):
     path = f"omades/{TEAMS[team]}/"
     ms = [m for m in MATCHES if team in (m["home"], m["away"])]
-    cur = [m for m in ms if m["season"] == CUR]
+    last_s = max((m["season"] for m in ms), default=CUR)
+    cur = [m for m in ms if m["season"] == last_s]
     t = totals(cur, team)
     allt = totals(ms, team)
     k = kpis([("Ισοζύγιο", sg(t["saldo"]), cls(t["saldo"])), ("Πέναλτι υπέρ / κατά", f'{t["pen_for"]} / {t["pen_against"]}', ""),
-              ("VAR υπέρ / κατά", f'{t["var_for"]} / {t["var_against"]}', ""), ("Κόκκινες υπέρ / κατά", f'{t["red_opp"]} / {t["red_own"]}', ""),
+              ("VAR υπέρ / κατά", f'{t["var_for"]} / {t["var_against"]}' if has(last_s, "var") else "—", ""), ("Κόκκινες υπέρ / κατά", f'{t["red_opp"]} / {t["red_own"]}', ""),
               ("Κίτρινες υπέρ / κατά", f'{t["yel_opp"]} / {t["yel"]}', ""), ("Αγώνες", t["n"], "")])
     # by referee, all seasons, vs team average
     avg = allt["saldo"] / allt["n"] if allt["n"] else 0
@@ -614,8 +635,8 @@ def team_page(team):
                  for d, p, tt, per in rr)
     body = f"""<p class="crumb"><a href="{rel(path, "")}">Ομάδες</a> / {esc(team)}</p>
 <h1>{esc(team)}: στατιστικά διαιτησίας</h1>
-<p class="lead">Σεζόν {CUR}: {t["w"]} νίκες, {t["d"]} ισοπαλίες, {t["l"]} ήττες σε {t["n"]} αγώνες.</p>
-{k}
+<p class="lead">{"Σεζόν " + last_s if last_s == CUR else "Τελευταία σεζόν στη Super League (" + last_s + ")"}: {t["w"]} νίκες, {t["d"]} ισοπαλίες, {t["l"]} ήττες σε {t["n"]} αγώνες.</p>
+{k}{team_seasons(path, team, ms)}
 <h2>Με κάθε διαιτητή</h2>
 <p class="lead">Ισοζύγιο ανά αγώνα με κάθε διαιτητή, σε σύγκριση με τον μέσο όρο της ομάδας ({avg:+.2f}). Όλες οι καταγεγραμμένες σεζόν.</p>
 <div class="tablewrap"><table class="t"><tr><th class="l">Διαιτητής</th><th>Αγώνες</th><th>Ν-Ι-Η</th><th>Ισοζύγιο</th><th>Ανά αγώνα</th><th>Διαφορά</th></tr>{rt}</table></div>
@@ -624,8 +645,22 @@ def team_page(team):
 {var_list(path, ms, team)}
 <h2>Αγώνες</h2>
 {match_table(path, ms, team)}"""
-    page(path, f"{team}: διαιτητές, πέναλτι, VAR · Super League {CUR}",
-         f"Ισοζύγιο διαιτησίας του {team} στη Super League {CUR}: πέναλτι υπέρ και κατά, κάρτες, επεμβάσεις VAR και στατιστικά με κάθε διαιτητή.", body, "0.8")
+    page(path, f"{team}: διαιτητές, πέναλτι, VAR · Super League {last_s}",
+         f"Ισοζύγιο διαιτησίας του {team} στη Super League {last_s}: πέναλτι υπέρ και κατά, κάρτες, επεμβάσεις VAR και στατιστικά με κάθε διαιτητή.", body, "0.8")
+
+def team_seasons(path, team, ms):
+    ss = sorted({m["season"] for m in ms}, reverse=True)
+    if len(ss) < 2: return ""
+    tr = ""
+    for s_ in ss:
+        t = totals([m for m in ms if m["season"] == s_], team)
+        var = f'{t["var_for"]}–{t["var_against"]}' if has(s_, "var") else "—"
+        tr += (f'<tr><td><a href="{rel(path, "" if s_ == CUR else "sezon/" + s_ + "/")}">{s_}</a></td><td>{t["n"]}</td><td>{t["w"]}-{t["d"]}-{t["l"]}</td>'
+               f'<td class="{cls(t["saldo"])}"><b>{sg(t["saldo"])}</b></td><td>{t["pen_for"]}–{t["pen_against"]}</td>'
+               f'<td>{t["red_opp"]}–{t["red_own"]}</td><td>{t["yel_opp"]}–{t["yel"]}</td><td>{var}</td></tr>')
+    note = '<p class="note">«—»: για αυτή τη σεζόν δεν έχουν καταγραφεί επεμβάσεις VAR.</p>' if any(not has(x, "var") for x in ss) else ""
+    return (f'<h2>Ανά σεζόν</h2><div class="tablewrap"><table class="t"><tr><th>Σεζόν</th><th>Αγώνες</th><th>Ν-Ι-Η</th><th>Ισοζύγιο</th>'
+            f'<th>Πέναλτι υπέρ–κατά</th><th>Κόκκινες υπέρ–κατά</th><th>Κίτρινες υπέρ–κατά</th><th>VAR υπέρ–κατά</th></tr>{tr}</table></div>{note}')
 
 def team_ph(path, team):
     ph = [p for p in PH if team in (p["m"]["home"], p["m"]["away"])]
@@ -641,9 +676,11 @@ def ref_stats(lst):
     hw = sum(1 for m in lst if m["gh"] > m["ga"])
     return {"n": n, "pen": pen, "yel": yel, "red": red, "var": var, "ppm": pen / n if n else 0, "ypm": yel / n if n else 0, "hwp": hw / n if n else 0}
 
-def refs_index():
-    path = "diaitites/"
-    ms = season_ms(CUR)
+def refs_index(s=None):
+    s = s or CUR
+    path = "diaitites/" if s == CUR else f"diaitites/{s}/"
+    ms = season_ms(s)
+    hp = any(x["m"]["season"] == s for x in PH); hv = has(s, "var")
     by = defaultdict(list); byvar = defaultdict(list)
     for m in ms:
         if m["ref"]: by[m["ref"]].append(m)
@@ -651,7 +688,7 @@ def refs_index():
     lg = ref_stats(ms)
     errs = defaultdict(float)  # decisions judged wrong by the majority of τηλεκριτικοί in his matches as main referee
     for ph_ in PH:
-        if ph_["m"]["season"] == CUR and ph_["m"].get("ref"):
+        if ph_["m"]["season"] == s and ph_["m"].get("ref"):
             c = consensus(ph_)[0]
             if c in WRONG: errs[ph_["m"]["ref"]] += WEIGHT[c]
     people = set(by) | set(byvar)
@@ -662,23 +699,24 @@ def refs_index():
         vn = len(byvar.get(p, [])); vi = sum(len(m["var_items"]) for m in byvar.get(p, []))
         flag = f' <span class="pill">{esc(REFS[p]["assoc"])}</span>' if REFS.get(p, {}).get("foreign") else ""
         if s_["n"]:
-            rc = (f'<td data-v="{s_["n"]}">{s_["n"]}</td><td data-v="{errs.get(p, 0)}">{nf(errs.get(p, 0)) if PH else "—"}</td><td data-v="{s_["var"]}">{s_["var"]}</td>'
+            rc = (f'<td data-v="{s_["n"]}">{s_["n"]}</td><td data-v="{errs.get(p, 0)}">{nf(errs.get(p, 0)) if hp else "—"}</td><td data-v="{s_["var"]}">{s_["var"] if hv else "—"}</td>'
                   f'<td data-v="{s_["ppm"]:.3f}">{s_["ppm"]:.2f}</td><td data-v="{s_["ypm"]:.3f}">{s_["ypm"]:.2f}</td><td data-v="{s_["red"]}">{s_["red"]}</td>')
         else:
             rc = '<td data-v="0">0</td>' + '<td data-v="-1" class="nil">—</td>' * 5
-        vc = (f'<td class="vr" data-v="{vn}">{vn}</td><td class="vr" data-v="{vi}">{vi}</td>' if vn
+        vc = (f'<td class="vr" data-v="{vn}">{vn}</td><td class="vr" data-v="{vi}">{vi if hv else "—"}</td>' if vn
               else '<td class="vr" data-v="0">0</td><td class="vr nil" data-v="-1">—</td>')
         tr += f'<tr><td class="l">{ref_link(path, p)}{flag}</td>{rc}{vc}</tr>'
-    body = f"""<h1>Διαιτητές Super League {CUR}</h1>
-<p class="lead">Μέσος όρος πρωταθλήματος: {lg["ppm"]:.2f} πέναλτι και {lg["ypm"]:.2f} κίτρινες ανά αγώνα. Πάτησε μια στήλη για ταξινόμηση.</p>
+    extra = "" if hp and hv else ('<br>Για τη σεζόν ' + s + ' δεν έχουν καταγραφεί ' + " και ".join(x for x, ok in (("αμφισβητούμενες φάσεις", hp), ("επεμβάσεις VAR", hv)) if not ok) + ' («—»).')
+    body = f"""<div class="headrow"><div><h1>Διαιτητές Super League {s}</h1>
+<p class="lead">Μέσος όρος πρωταθλήματος: {lg["ppm"]:.2f} πέναλτι και {lg["ypm"]:.2f} κίτρινες ανά αγώνα. Πάτησε μια στήλη για ταξινόμηση.</p></div>{season_switch(path, s, "diaitites/", "diaitites/{}/")}</div>
 <div class="tablewrap"><table class="t sortable refs"><thead>
 <tr class="grp"><th></th><th colspan="6">Ως διαιτητής</th><th colspan="2" class="vr">Ως VAR</th></tr>
 <tr><th class="l">Διαιτητής</th><th>Αγώνες</th><th>Λάθη</th><th>Επεμβ. VAR</th><th>Πέναλτι/αγ.</th><th>Κίτρινες/αγ.</th><th>Κόκκινες</th><th class="vr">Αγώνες</th><th class="vr">Επεμβ.</th></tr>
 </thead><tbody>{tr}</tbody></table></div>
 <p class="note"><b>Ως διαιτητής</b>, στους αγώνες που σφύριξε στο γήπεδο. Λάθη: αποφάσεις που η πλειοψηφία των τηλεκριτικών έκρινε λάθος (οι «εν μέρει λάθος» δεν μετράνε)· μετράνε μόνο οι <a href="{rel(path, "tilekritiki/")}">αμφισβητούμενες φάσεις</a> που καταγράφουμε. Επεμβ. VAR: αποφάσεις του που άλλαξαν μετά από επέμβαση του VAR.<br>
-<b>Ως VAR</b>, στους αγώνες όπου ήταν στο δωμάτιο του VAR. Επεμβ. ως VAR: πόσες φορές η επέμβασή του άλλαξε την απόφαση του διαιτητή.</p>"""
-    page(path, f"Διαιτητές Super League {CUR}: πέναλτι, κάρτες, VAR · refstats.gr",
-         f"Στατιστικά κάθε διαιτητή της Super League {CUR}: αγώνες, λάθη κατά τους τηλεκριτικούς, επεμβάσεις VAR, πέναλτι και κάρτες ανά αγώνα, και τα στατιστικά του ως VAR.", body, "0.9")
+<b>Ως VAR</b>, στους αγώνες όπου ήταν στο δωμάτιο του VAR. Επεμβ. ως VAR: πόσες φορές η επέμβασή του άλλαξε την απόφαση του διαιτητή.{extra}</p>"""
+    page(path, f"Διαιτητές Super League {s}: πέναλτι, κάρτες, VAR · refstats.gr",
+         f"Στατιστικά κάθε διαιτητή της Super League {s}: αγώνες, λάθη κατά τους τηλεκριτικούς, επεμβάσεις VAR, πέναλτι και κάρτες ανά αγώνα, και τα στατιστικά του ως VAR.", body, "0.9" if s == CUR else "0.6")
 
 def ref_ph(path, ref):
     ph = [x for x in PH if x["m"]["ref"] == ref]
@@ -686,6 +724,22 @@ def ref_ph(path, ref):
     w = sum(1 for x in ph if consensus(x)[0] in WRONG)
     return (f'<h2>Αμφισβητούμενες φάσεις</h2><p class="lead">{len(ph)} φάσεις στους αγώνες του σχολιάστηκαν· η πλειοψηφία των τηλεκριτικών έκρινε λάθος τις {w}.</p>'
             f'{phase_cards(path, ph)}')
+
+def ref_seasons(path, p, lst, asvar):
+    ss = sorted({m["season"] for m in lst + asvar}, reverse=True)
+    if len(ss) < 2: return ""
+    tr = ""
+    for s_ in ss:
+        mine = [m for m in lst if m["season"] == s_]; st = ref_stats(mine); lg = ref_stats(season_ms(s_))
+        nv = sum(1 for m in asvar if m["season"] == s_)
+        idx = "diaitites/" if s_ == CUR else f"diaitites/{s_}/"
+        if mine:
+            tr += (f'<tr><td><a href="{rel(path, idx)}">{s_}</a></td><td>{st["n"]}</td><td><b>{st["ppm"]:.2f}</b> <span class="nil">/ {lg["ppm"]:.2f}</span></td>'
+                   f'<td><b>{st["ypm"]:.2f}</b> <span class="nil">/ {lg["ypm"]:.2f}</span></td><td>{st["red"]}</td><td>{st["var"] if has(s_, "var") else "—"}</td><td class="vr">{nv}</td></tr>')
+        else:
+            tr += f'<tr><td><a href="{rel(path, idx)}">{s_}</a></td><td>0</td><td class="nil">—</td><td class="nil">—</td><td class="nil">—</td><td class="nil">—</td><td class="vr">{nv}</td></tr>'
+    return (f'<h2>Ανά σεζόν</h2><div class="tablewrap"><table class="t"><tr><th>Σεζόν</th><th>Αγώνες</th><th>Πέναλτι/αγ.</th><th>Κίτρινες/αγ.</th><th>Κόκκινες</th><th>Επεμβ. VAR</th><th class="vr">Ως VAR</th></tr>{tr}</table></div>'
+            '<p class="note">Δίπλα σε κάθε μέσο όρο του διαιτητή, με γκρι, ο μέσος όρος του πρωταθλήματος την ίδια σεζόν.</p>')
 
 def ref_page(p):
     path = f"diaitites/{REFS[p]['slug']}/"
@@ -695,12 +749,12 @@ def ref_page(p):
     info = REFS[p]["assoc"]
     head = f"""<p class="crumb"><a href="{rel(path, "diaitites/")}">Διαιτητές</a> / {esc(p)}</p>
 <h1>{esc(p)}: στατιστικά διαιτητή</h1>
-<p class="lead">{esc(("Ένωση/χώρα: " + info + ". ") if info else "")}{s["n"]} αγώνες ως κύριος διαιτητής, {len(asvar)} ως VAR.</p>"""
+<p class="lead">{esc(("Ένωση/χώρα: " + info + ". ") if info else "")}{s["n"]} αγώνες ως κύριος διαιτητής, {len(asvar)} ως VAR{" (όλες οι σεζόν)" if len({m["season"] for m in lst + asvar}) > 1 else ""}.</p>"""
     blocks = [head]
     if lst:
         blocks.append(kpis([("Αγώνες", s["n"], ""), ("Πέναλτι / αγώνα", f'{s["ppm"]:.2f}', ""), ("Κίτρινες / αγώνα", f'{s["ypm"]:.2f}', ""),
                             ("Κόκκινες", s["red"], ""), ("Επεμβάσεις VAR", s["var"], ""), ("Νίκες γηπεδούχου", f'{round(s["hwp"] * 100)}%', "")]))
-        blocks.append(f'<p class="note">Μέσος όρος πρωταθλήματος {CUR}: {lg["ppm"]:.2f} πέναλτι και {lg["ypm"]:.2f} κίτρινες ανά αγώνα.</p>')
+        blocks.append(ref_seasons(path, p, lst, asvar) or f'<p class="note">Μέσος όρος πρωταθλήματος {lst[0]["season"]}: {ref_stats(season_ms(lst[0]["season"]))["ppm"]:.2f} πέναλτι και {ref_stats(season_ms(lst[0]["season"]))["ypm"]:.2f} κίτρινες ανά αγώνα.</p>')
         teams = sorted({t for m in lst for t in (m["home"], m["away"])})
         rr = []
         for t in teams:
@@ -718,9 +772,10 @@ def ref_page(p):
 <h2>Φάσεις VAR στους αγώνες του</h2>{var_list(path, lst)}
 <h2>Αγώνες</h2>{match_table(path, lst)}""")
     if asvar:
-        tr = "".join(f'<tr><td><a href="{rel(path, round_path(m))}">{m["round"]}</a></td><td class="l">{esc(m["home"])} – {esc(m["away"])}</td>'
-                     f'<td class="l">{ref_link(path, m["ref"])}</td><td>{len(m["var_items"])}</td></tr>' for m in reversed(asvar))
-        blocks.append(f'<h2>Ως VAR</h2><div class="tablewrap"><table class="t"><tr><th>Αγ.</th><th class="l">Αγώνας</th><th class="l">Διαιτητής</th><th>Επεμβάσεις</th></tr>{tr}</table></div>')
+        mv = len({m["season"] for m in asvar}) > 1
+        tr = "".join(f'<tr>{"<td>" + m["season"] + "</td>" if mv else ""}<td><a href="{rel(path, round_path(m))}">{m["round"]}</a></td><td class="l">{esc(m["home"])} – {esc(m["away"])}</td>'
+                     f'<td class="l">{ref_link(path, m["ref"])}</td><td>{len(m["var_items"]) if has(m["season"], "var") else "—"}</td></tr>' for m in reversed(asvar))
+        blocks.append(f'<h2>Ως VAR</h2><div class="tablewrap"><table class="t"><tr>{"<th>Σεζόν</th>" if mv else ""}<th>Αγ.</th><th class="l">Αγώνας</th><th class="l">Διαιτητής</th><th>Επεμβάσεις</th></tr>{tr}</table></div>')
     page(path, f"{p}: διαιτητής Super League, στατιστικά · refstats.gr",
          f"Ο διαιτητής {p} στη Super League: αγώνες, πέναλτι και κάρτες ανά αγώνα, επεμβάσεις VAR και ισοζύγιο κάθε ομάδας μαζί του.", body="\n".join(blocks), priority="0.7")
 
@@ -792,7 +847,8 @@ def match_page(m):
     ph = [p for p in PH if p["m"]["id"] == m["id"]]
     an = [a for a in ANN if a["m"]["id"] == m["id"]]
     H, A = m["home"], m["away"]
-    def row(lab, k):
+    def row(lab, k):  # a column left empty in the sheet (older seasons) is not shown as 0
+        if (k == "var" and not has(m["season"], "var")) or (k in ("foul", "ann", "red") and k not in m["filled"]): return ""
         return f'<tr><td class="l">{lab}</td><td>{m[k + "_h"]}</td><td>{m[k + "_a"]}</td></tr>'
     stats = (f'<div class="tablewrap"><table class="t mstat"><tr><th class="l"></th><th>{esc(short(H))}</th><th>{esc(short(A))}</th></tr>'
              + row("Πέναλτι", "pen") + row("Κίτρινες", "yel") + row("Κόκκινες", "red") + row("Φάουλ", "foul") + row("Ακυρωθέντα γκολ", "ann") + row("Επεμβάσεις VAR υπέρ", "var")
@@ -1341,7 +1397,7 @@ for s in SEASONS[1:]:
     home_page(s, f"sezon/{s}/")
 for t in sorted({t for m in MATCHES for t in (m["home"], m["away"])}):
     team_page(t)
-refs_index()
+for s_ in SEASONS: refs_index(s_)
 for p in sorted({p for m in MATCHES for p in (m["ref"], m["var"]) if p}):
     ref_page(p)
 for s in SEASONS:
