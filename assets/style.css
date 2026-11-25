@@ -328,3 +328,5 @@ table.refs th:first-child,table.refs td:first-child{position:sticky;left:0;backg
 .logo .beta{align-self:flex-start;margin-left:-4px;font-family:var(--body);font-size:10px;font-weight:700;letter-spacing:.8px;color:var(--ink);background:var(--card);border-radius:3px;padding:2px 5px;text-decoration:none;line-height:1.2}
 .betanote{background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:8px 10px;color:var(--ink)}
 .betanote b{background:var(--card);border-radius:3px;padding:1px 5px;font-size:10px;letter-spacing:.8px}
+.rteams th small{display:block;font-size:9px;font-weight:600;letter-spacing:.3px;opacity:.75;text-transform:none}
+@media (max-width:560px){.rteams th,.rteams td{padding-left:7px;padding-right:7px}}
