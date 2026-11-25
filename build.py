@@ -653,7 +653,7 @@ def perf_table(label, items):
                + (pair(vt["var_for"], vt["var_against"]) if vt else '<td data-v="-99" class="nil">—</td>') + '</tr>')
     allvar = all(has(m["season"], "var") for _, _, ms in items for m in ms)
     return (f'<div class="tablewrap"><table class="t sortable rteams"><thead><tr><th class="l">{label}</th><th>Αγώνες</th><th>Ν-Ι-Η</th>'
-            '<th>Πέναλτι<small>υπέρ–κατά</small></th><th>Κίτρινες<small>υπέρ–κατά</small></th><th>Κόκκινες<small>υπέρ–κατά</small></th><th>VAR<small>υπέρ–κατά</small></th>'
+            '<th>Πέναλτι<br><small>υπέρ–κατά</small></th><th>Κίτρινες<br><small>υπέρ–κατά</small></th><th>Κόκκινες<br><small>υπέρ–κατά</small></th><th>VAR<br><small>υπέρ–κατά</small></th>'
             f'</tr></thead><tbody>{tr}</tbody></table></div>'
             '<p class="note">Υπέρ: υπέρ της ομάδας (π.χ. κίτρινες υπέρ = κίτρινες στους αντιπάλους της). Κατά: εναντίον της. Οι στήλες υπέρ–κατά ταξινομούνται με τη διαφορά. '
             f'VAR: επεμβάσεις που άλλαξαν απόφαση{"" if allvar else " (μόνο σεζόν με καταγεγραμμένες επεμβάσεις VAR)"}.</p>')
