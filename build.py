@@ -145,7 +145,7 @@ for m in MATCHES:  # make sure every name used has a page
     for p in (m["ref"], m["var"]):
         if p: REFS.setdefault(p, {"slug": slugify(p), "assoc": "", "foreign": False})
 
-PHASE_ORDER = {"Κανονική": 0, "Πλέι οφ 1-4": 1, "Πλέι οφ 5-8": 2, "Πλέι άουτ": 3}
+PHASE_ORDER = {"Κανονική": 0, "Πλέι οφ 1-4": 1, "Πλέι οφ 1-6": 1, "Πλέι οφ 5-8": 2, "Πλέι άουτ": 3}
 MATCHES.sort(key=lambda m: (m["season"], PHASE_ORDER.get(m["phase"], 9), m["round"], m["date"] or datetime.min, m["home"]))
 SEASONS = sorted({m["season"] for m in MATCHES}, reverse=True)
 CUR = SEASONS[0] if SEASONS else ""
